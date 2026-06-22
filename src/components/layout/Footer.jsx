@@ -110,7 +110,7 @@ const Footer = () => {
                                     href="mailto:contact@solapurgurukulam.com"
                                     className="text-gray-400 hover:text-amber-400 transition-colors duration-200"
                                 >
-                                    contact@solapurgurukulam.com
+                                    solapurgurukulam@gmail.com
                                 </a>
                             </li>
                         </ul>
