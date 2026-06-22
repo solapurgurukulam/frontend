@@ -23,7 +23,7 @@ const Profile = () => {
     const [isLoading, setIsLoading] = useState(false);
     const heroRef = useRef(null);
     const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
-    const yParallax = useSpring(useTransform(scrollYProgress, [0, 1], [0, 80]), { stiffness: 100, damping: 30 });
+    const yParallax = useSpring(useTransform(scrollYProgress, [0, 1]dispatch, [0, 80]), { stiffness: 100, damping: 30 });
 
     const {
         register,
@@ -42,7 +42,7 @@ const Profile = () => {
         setIsLoading(true);
         try {
             const response = await authApi.updateProfile(data);
-            dispatch(setUser(response.data.user));
+            dispatch(setUser(response.data));
             toast.success('Profile updated successfully');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Failed to update profile');

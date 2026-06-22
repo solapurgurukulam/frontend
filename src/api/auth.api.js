@@ -11,3 +11,5 @@ export const authApi = {
     changePassword: (data) => axiosInstance.put('/auth/change-password', data),
     logout: () => axiosInstance.post('/auth/logout'),
 };
+
+
