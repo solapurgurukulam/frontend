@@ -3,10 +3,6 @@ import { useRef, useEffect } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import { Mail, Phone, MapPin, User, Award, Sparkles } from 'lucide-react';
 
-// Imported images so the bundler can process them correctly
-import heroImg from './image/heroimg.jpeg';
-import profileImg from './image/image2.jpeg';
-
 const ContactUs = () => {
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
@@ -31,9 +27,8 @@ const ContactUs = () => {
       {/* Hero Section */}
       <section ref={heroRef} className="relative h-[60vh] md:h-[70vh] overflow-hidden">
         <motion.div style={{ y: yParallax }} className="absolute inset-0">
-          {/* Updated Hero Image Source */}
           <img
-            src={heroImg}
+            src="/image/heroimg.jpeg"
             alt="Vedic temple background"
             className="w-full h-full object-cover"
           />
@@ -90,9 +85,8 @@ const ContactUs = () => {
             {/* Left: About Text + Profile */}
             <div className="lg:w-2/3 space-y-6">
               <motion.div variants={fadeUp} className="flex flex-col sm:flex-row items-center sm:items-start gap-8">
-                {/* Updated Profile Image Source */}
                 <img
-                  src={profileImg}
+                  src="/image/image2.jpeg"
                   alt="Jangam Pradeep Shastri"
                   className="w-48 h-48 rounded-full border-4 border-amber-400/70 shadow-2xl object-cover"
                 />
@@ -216,4 +210,3 @@ const ContactUs = () => {
 
 export default ContactUs;
 
-```
