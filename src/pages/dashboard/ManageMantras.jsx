@@ -1,58 +1,44 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Plus, Edit, Trash2, Search, X, Music, Clock, TrendingUp, Star, Languages, Info, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Music, Clock, TrendingUp, Star, Languages, Info, ArrowRight, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 30000, // Reduced timeout for faster response
+    timeout: 30000,
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
 });
 
-// Request interceptor with retry logic
 apiClient.interceptors.request.use((config) => {
     const token = localStorage.getItem('accessToken');
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
-}, (error) => {
-    return Promise.reject(error);
 });
 
-// Response interceptor with better error handling
 apiClient.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        
-        // Don't retry if already retried or if it's a non-401 error
-        if (originalRequest._retry || error.response?.status !== 401) {
-            return Promise.reject(error);
-        }
-        
-        originalRequest._retry = true;
-        
-        try {
-            const refreshToken = localStorage.getItem('refreshToken');
-            if (!refreshToken) {
-                throw new Error('No refresh token');
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            originalRequest._retry = true;
+            try {
+                const refreshToken = localStorage.getItem('refreshToken');
+                const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+                if (response.data.success) {
+                    localStorage.setItem('accessToken', response.data.data.accessToken);
+                    originalRequest.headers.Authorization = `Bearer ${response.data.data.accessToken}`;
+                    return apiClient(originalRequest);
+                }
+            } catch (err) {
+                localStorage.clear();
+                window.location.href = '/login';
             }
-            
-            const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-            if (response.data.success) {
-                localStorage.setItem('accessToken', response.data.data.accessToken);
-                originalRequest.headers.Authorization = `Bearer ${response.data.data.accessToken}`;
-                return apiClient(originalRequest);
-            }
-        } catch (err) {
-            // Clear tokens and redirect to login
-            localStorage.clear();
-            window.location.href = '/login';
-            return Promise.reject(err);
         }
+        return Promise.reject(error);
     }
 );
 
@@ -81,7 +67,6 @@ const ErrorDisplay = ({ message, onRetry }) => (
     </div>
 );
 
-// Helper: build absolute image URL
 const getImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
@@ -89,7 +74,6 @@ const getImageUrl = (path) => {
     return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 };
 
-// Get a soft pastel color based on category name
 const getCategoryColor = (categoryName) => {
     if (!categoryName) return 'from-amber-100 to-orange-200';
     const name = categoryName.toLowerCase();
@@ -103,7 +87,6 @@ const getCategoryColor = (categoryName) => {
     return 'from-amber-100 to-orange-200';
 };
 
-// Get a gradient border color
 const getBorderColor = (categoryName) => {
     if (!categoryName) return 'border-amber-200';
     const name = categoryName.toLowerCase();
@@ -148,14 +131,13 @@ const ManageMantras = () => {
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [fetchError, setFetchError] = useState(null);
+    const [validationErrors, setValidationErrors] = useState({});
 
-    // Fetch categories and mantras with proper error handling
     const fetchData = useCallback(async () => {
         setLoading(true);
         setFetchError(null);
         
         try {
-            // Fetch both in parallel for better performance
             const [categoriesResponse, mantrasResponse] = await Promise.all([
                 apiClient.get('/categories?limit=100').catch(() => ({ data: { success: false, data: [] } })),
                 apiClient.get('/mantras?limit=100').catch(() => ({ data: { success: false, data: [] } }))
@@ -184,46 +166,40 @@ const ManageMantras = () => {
         fetchData();
     }, [fetchData]);
 
-    // Handle form submission
+    // Validate form before submission
+    const validateForm = () => {
+        const errors = {};
+        
+        if (!formData.name?.trim()) errors.name = 'Mantra name is required';
+        if (!formData.category) errors.category = 'Please select a category';
+        if (!formData.sanskrit?.trim()) errors.sanskrit = 'Sanskrit text is required';
+        if (!formData.kannada?.trim()) errors.kannada = 'Kannada translation is required';
+        if (!formData.marathi?.trim()) errors.marathi = 'Marathi translation is required';
+        if (!formData.tamil?.trim()) errors.tamil = 'Telugu translation is required';
+        if (!formData.benefits?.trim()) errors.benefits = 'Benefits are required';
+        if (!formData.howToChant?.trim()) errors.howToChant = 'How to chant is required';
+        if (!formData.bestTime?.trim()) errors.bestTime = 'Best time is required';
+        
+        setValidationErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
+        setValidationErrors({});
 
         // Validate form
-        if (!formData.name?.trim()) {
-            toast.error('Mantra name is required');
+        if (!validateForm()) {
+            // Show first error as toast
+            const firstError = Object.values(validationErrors)[0];
+            toast.error(firstError);
             return;
         }
-        if (!formData.category) {
-            toast.error('Please select a category');
-            return;
-        }
-        if (!formData.sanskrit?.trim()) {
-            toast.error('Sanskrit text is required');
-            return;
-        }
-        if (!formData.kannada?.trim()) {
-            toast.error('Kannada translation is required');
-            return;
-        }
-        if (!formData.marathi?.trim()) {
-            toast.error('Marathi translation is required');
-            return;
-        }
-        if (!formData.tamil?.trim()) {
-            toast.error('Telugu translation is required');
-            return;
-        }
-        if (!formData.benefits?.trim()) {
-            toast.error('Benefits are required');
-            return;
-        }
-        if (!formData.howToChant?.trim()) {
-            toast.error('How to chant is required');
-            return;
-        }
-        if (!formData.bestTime?.trim()) {
-            toast.error('Best time is required');
+
+        // Check if category exists
+        if (categoriesList.length === 0) {
+            toast.error('No categories available. Please create a category first.');
             return;
         }
 
@@ -241,7 +217,7 @@ const ManageMantras = () => {
                 benefits: formData.benefits.trim(),
                 howToChant: formData.howToChant.trim(),
                 bestTime: formData.bestTime.trim(),
-                recommendedCount: formData.recommendedCount || 108,
+                recommendedCount: parseInt(formData.recommendedCount) || 108,
                 meaning: formData.meaning?.trim() || '',
                 audioUrl: formData.audioUrl?.trim() || '',
                 category: formData.category,
@@ -249,6 +225,8 @@ const ManageMantras = () => {
                 isFeatured: formData.isFeatured || false,
                 isActive: true,
             };
+
+            console.log('Sending payload:', payload); // Debug log
 
             let response;
             if (editingMantra) {
@@ -268,7 +246,27 @@ const ManageMantras = () => {
             }
         } catch (error) {
             console.error('Save mantra error:', error);
-            const errorMsg = error.response?.data?.message || 'Failed to save mantra. Please try again.';
+            
+            // Better error handling
+            let errorMsg = 'Failed to save mantra. Please try again.';
+            
+            if (error.response) {
+                // The request was made and the server responded with a status code
+                console.error('Response data:', error.response.data);
+                console.error('Response status:', error.response.status);
+                
+                if (error.response.data?.message) {
+                    errorMsg = error.response.data.message;
+                } else if (error.response.status === 400) {
+                    errorMsg = 'Validation error. Please check all required fields.';
+                } else if (error.response.status === 500) {
+                    errorMsg = 'Server error. Please try again later.';
+                }
+            } else if (error.request) {
+                // The request was made but no response was received
+                errorMsg = 'No response from server. Please check your connection.';
+            }
+            
             toast.error(errorMsg);
             setError(errorMsg);
         } finally {
@@ -276,7 +274,6 @@ const ManageMantras = () => {
         }
     };
 
-    // Handle delete
     const handleDelete = async (id, name) => {
         if (!window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
             return;
@@ -294,7 +291,6 @@ const ManageMantras = () => {
         }
     };
 
-    // Open form for create/edit
     const openForm = (mantra = null) => {
         if (mantra) {
             setEditingMantra(mantra);
@@ -321,6 +317,7 @@ const ManageMantras = () => {
             setFormData(EMPTY_FORM);
         }
         setError(null);
+        setValidationErrors({});
         setShowForm(true);
     };
 
@@ -328,9 +325,9 @@ const ManageMantras = () => {
         setShowForm(false);
         setEditingMantra(null);
         setError(null);
+        setValidationErrors({});
     };
 
-    // Get category name from ID
     const getCategoryName = useCallback((cat) => {
         if (!cat) return 'Unknown';
         if (cat?.name) return cat.name;
@@ -338,7 +335,6 @@ const ManageMantras = () => {
         return found ? found.name : 'Unknown';
     }, [categoriesList]);
 
-    // Filter mantras
     const filteredMantras = useMemo(() => {
         return (mantras || []).filter(m => {
             const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -350,40 +346,54 @@ const ManageMantras = () => {
         });
     }, [mantras, searchTerm, selectedCategory]);
 
-    // Field renderer
-    const field = (label, key, type = 'text', required = false, rows = null, placeholder = '') => (
-        <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                {label} {required && <span className="text-red-500">*</span>}
-            </label>
-            {rows ? (
-                <textarea
-                    value={formData[key] || ''}
-                    onChange={e => setFormData({ ...formData, [key]: e.target.value })}
-                    rows={rows}
-                    placeholder={placeholder}
-                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                    required={required}
-                />
-            ) : (
-                <input
-                    type={type}
-                    value={formData[key] || ''}
-                    onChange={e => setFormData({ ...formData, [key]: type === 'number' ? parseInt(e.target.value) || 0 : e.target.value })}
-                    placeholder={placeholder}
-                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                    required={required}
-                />
-            )}
-        </div>
-    );
+    const field = (label, key, type = 'text', required = false, rows = null, placeholder = '') => {
+        const hasError = validationErrors[key];
+        
+        return (
+            <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                    {label} {required && <span className="text-red-500">*</span>}
+                </label>
+                {rows ? (
+                    <textarea
+                        value={formData[key] || ''}
+                        onChange={e => {
+                            setFormData({ ...formData, [key]: e.target.value });
+                            if (validationErrors[key]) {
+                                setValidationErrors({ ...validationErrors, [key]: '' });
+                            }
+                        }}
+                        rows={rows}
+                        placeholder={placeholder}
+                        className={`w-full px-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
+                        required={required}
+                    />
+                ) : (
+                    <input
+                        type={type}
+                        value={formData[key] || ''}
+                        onChange={e => {
+                            setFormData({ ...formData, [key]: type === 'number' ? parseInt(e.target.value) || 0 : e.target.value });
+                            if (validationErrors[key]) {
+                                setValidationErrors({ ...validationErrors, [key]: '' });
+                            }
+                        }}
+                        placeholder={placeholder}
+                        className={`w-full px-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
+                        required={required}
+                    />
+                )}
+                {hasError && (
+                    <p className="text-red-500 text-xs mt-1">{hasError}</p>
+                )}
+            </div>
+        );
+    };
 
-    // Loading state
     if (loading && mantras.length === 0) {
         return <Loader />;
     }
 
-    // Error state with retry
     if (fetchError) {
         return <ErrorDisplay message={fetchError} onRetry={fetchData} />;
     }
@@ -391,7 +401,6 @@ const ManageMantras = () => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 p-6 md:p-8">
             <div className="max-w-7xl mx-auto">
-                {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
                     <div>
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100/50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium mb-3">
@@ -413,7 +422,6 @@ const ManageMantras = () => {
                     </button>
                 </div>
 
-                {/* Search and Filter */}
                 <div className="flex flex-col sm:flex-row gap-4 mb-8">
                     <div className="relative flex-1">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-400" />
@@ -445,7 +453,6 @@ const ManageMantras = () => {
                     )}
                 </div>
 
-                {/* Mantra Grid */}
                 {filteredMantras.length === 0 ? (
                     <div className="text-center py-20 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-amber-200/40">
                         <div className="text-6xl mb-4">🔱</div>
@@ -460,7 +467,6 @@ const ManageMantras = () => {
                             const cat = categoriesList.find(c => c._id === (m.category?._id || m.category));
                             const catImage = cat?.image ? getImageUrl(cat.image) : null;
                             const gradientBg = getCategoryColor(categoryName);
-                            const borderColor = getBorderColor(categoryName);
 
                             return (
                                 <motion.div
@@ -554,7 +560,6 @@ const ManageMantras = () => {
                     </div>
                 )}
 
-                {/* Form Modal */}
                 <AnimatePresence>
                     {showForm && (
                         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeForm}>
@@ -585,6 +590,13 @@ const ManageMantras = () => {
                                         </div>
                                     )}
 
+                                    {categoriesList.length === 0 && (
+                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 text-yellow-700 dark:text-yellow-400 text-sm flex items-start gap-2">
+                                            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                                            <span>⚠️ No categories available. Please create a category first before adding mantras.</span>
+                                        </div>
+                                    )}
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {field('Mantra Name', 'name', 'text', true, null, 'e.g., Gayatri Mantra')}
                                         <div>
@@ -593,13 +605,21 @@ const ManageMantras = () => {
                                             </label>
                                             <select
                                                 value={formData.category}
-                                                onChange={e => setFormData({ ...formData, category: e.target.value })}
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                                onChange={e => {
+                                                    setFormData({ ...formData, category: e.target.value });
+                                                    if (validationErrors.category) {
+                                                        setValidationErrors({ ...validationErrors, category: '' });
+                                                    }
+                                                }}
+                                                className={`w-full px-4 py-2.5 border ${validationErrors.category ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
                                                 required
                                             >
                                                 <option value="">-- Select Category --</option>
                                                 {categoriesList.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                                             </select>
+                                            {validationErrors.category && (
+                                                <p className="text-red-500 text-xs mt-1">{validationErrors.category}</p>
+                                            )}
                                             {categoriesList.length === 0 && (
                                                 <p className="text-red-500 text-xs mt-1">⚠️ No categories found. Please create a category first.</p>
                                             )}
@@ -613,12 +633,20 @@ const ManageMantras = () => {
                                         </label>
                                         <textarea
                                             value={formData.sanskrit}
-                                            onChange={e => setFormData({ ...formData, sanskrit: e.target.value })}
+                                            onChange={e => {
+                                                setFormData({ ...formData, sanskrit: e.target.value });
+                                                if (validationErrors.sanskrit) {
+                                                    setValidationErrors({ ...validationErrors, sanskrit: '' });
+                                                }
+                                            }}
                                             rows={4}
                                             placeholder="संस्कृत पाठ यहाँ लिखें..."
-                                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition font-devanagari text-lg"
+                                            className={`w-full px-4 py-2.5 border ${validationErrors.sanskrit ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition font-devanagari text-lg`}
                                             required
                                         />
+                                        {validationErrors.sanskrit && (
+                                            <p className="text-red-500 text-xs mt-1">{validationErrors.sanskrit}</p>
+                                        )}
                                     </div>
 
                                     <div className="border border-amber-200 dark:border-amber-800/50 rounded-xl p-5 bg-amber-50/30 dark:bg-amber-900/10">
@@ -628,15 +656,60 @@ const ManageMantras = () => {
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ಕನ್ನಡ (Kannada) <span className="text-red-500">*</span></label>
-                                                <textarea required rows={4} value={formData.kannada} onChange={e => setFormData({ ...formData, kannada: e.target.value })} placeholder="Kannada translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
+                                                <textarea 
+                                                    required 
+                                                    rows={4} 
+                                                    value={formData.kannada} 
+                                                    onChange={e => {
+                                                        setFormData({ ...formData, kannada: e.target.value });
+                                                        if (validationErrors.kannada) {
+                                                            setValidationErrors({ ...validationErrors, kannada: '' });
+                                                        }
+                                                    }}
+                                                    placeholder="Kannada translation..." 
+                                                    className={`w-full px-3 py-2 border ${validationErrors.kannada ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500`} 
+                                                />
+                                                {validationErrors.kannada && (
+                                                    <p className="text-red-500 text-xs mt-1">{validationErrors.kannada}</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">मराठी (Marathi) <span className="text-red-500">*</span></label>
-                                                <textarea required rows={4} value={formData.marathi} onChange={e => setFormData({ ...formData, marathi: e.target.value })} placeholder="Marathi translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
+                                                <textarea 
+                                                    required 
+                                                    rows={4} 
+                                                    value={formData.marathi} 
+                                                    onChange={e => {
+                                                        setFormData({ ...formData, marathi: e.target.value });
+                                                        if (validationErrors.marathi) {
+                                                            setValidationErrors({ ...validationErrors, marathi: '' });
+                                                        }
+                                                    }}
+                                                    placeholder="Marathi translation..." 
+                                                    className={`w-full px-3 py-2 border ${validationErrors.marathi ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500`} 
+                                                />
+                                                {validationErrors.marathi && (
+                                                    <p className="text-red-500 text-xs mt-1">{validationErrors.marathi}</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">తెలుగు (Telugu) <span className="text-red-500">*</span></label>
-                                                <textarea required rows={4} value={formData.tamil} onChange={e => setFormData({ ...formData, tamil: e.target.value })} placeholder="Telugu translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
+                                                <textarea 
+                                                    required 
+                                                    rows={4} 
+                                                    value={formData.tamil} 
+                                                    onChange={e => {
+                                                        setFormData({ ...formData, tamil: e.target.value });
+                                                        if (validationErrors.tamil) {
+                                                            setValidationErrors({ ...validationErrors, tamil: '' });
+                                                        }
+                                                    }}
+                                                    placeholder="Telugu translation..." 
+                                                    className={`w-full px-3 py-2 border ${validationErrors.tamil ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500`} 
+                                                />
+                                                {validationErrors.tamil && (
+                                                    <p className="text-red-500 text-xs mt-1">{validationErrors.tamil}</p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -684,9 +757,16 @@ const ManageMantras = () => {
                                         <button
                                             type="submit"
                                             disabled={isSubmitting || categoriesList.length === 0}
-                                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
+                                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 flex items-center gap-2"
                                         >
-                                            {isSubmitting ? 'Saving...' : (editingMantra ? 'Update Mantra' : 'Create Mantra')}
+                                            {isSubmitting ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                editingMantra ? 'Update Mantra' : 'Create Mantra'
+                                            )}
                                         </button>
                                     </div>
                                 </form>
