@@ -811,7 +811,7 @@ const ManageAdmins = () => {
                                                         onChange={(e) => setAddExistingForm({ 
                                                             ...addExistingForm, 
                                                             email: e.target.value, 
-                                                            phone: '' 
+                                                            phone: 'Enter phone number' 
                                                         })}
                                                         className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                                                         placeholder=""
