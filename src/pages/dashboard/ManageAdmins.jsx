@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Edit, Trash2, Shield, User, Mail, Phone, Ban, CheckCircle, X, Users, Award } from 'lucide-react';
+import { 
+    Plus, Edit, Trash2, Shield, User, Mail, Phone, Ban, 
+    CheckCircle, X, Users, Award, UserPlus, UserCheck, 
+    Info, AlertCircle 
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
@@ -54,15 +58,32 @@ const Loader = () => (
 const ManageAdmins = () => {
     const [admins, setAdmins] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isAddExistingModalOpen, setIsAddExistingModalOpen] = useState(false);
     const [editingAdmin, setEditingAdmin] = useState(null);
-    const [formData, setFormData] = useState({
+    
+    // Form states
+    const [createForm, setCreateForm] = useState({
         name: '',
         email: '',
         phone: '',
         password: '',
         role: 'admin',
     });
+    
+    const [editForm, setEditForm] = useState({
+        name: '',
+        phone: '',
+        role: 'admin',
+    });
+    
+    const [addExistingForm, setAddExistingForm] = useState({
+        email: '',
+        phone: '',
+    });
+    
+    const [searchMethod, setSearchMethod] = useState('email');
 
     useEffect(() => { fetchAdmins(); }, []);
 
@@ -81,96 +102,162 @@ const ManageAdmins = () => {
         }
     };
 
-    const handleOpenModal = (admin = null) => {
-        if (admin) {
-            setEditingAdmin(admin);
-            setFormData({
-                name: admin.name || '',
-                email: admin.email || '',
-                phone: admin.phone || '',
-                password: '',
-                role: admin.role || 'admin',
-            });
-        } else {
-            setEditingAdmin(null);
-            setFormData({ name: '', email: '', phone: '', password: '', role: 'admin' });
-        }
-        setIsModalOpen(true);
+    // Open Create New Admin Modal
+    const handleOpenCreateModal = () => {
+        setCreateForm({ name: '', email: '', phone: '', password: '', role: 'admin' });
+        setIsCreateModalOpen(true);
     };
 
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
+    const handleCloseCreateModal = () => {
+        setIsCreateModalOpen(false);
+        setCreateForm({ name: '', email: '', phone: '', password: '', role: 'admin' });
+    };
+
+    // Open Edit Admin Modal
+    const handleOpenEditModal = (admin) => {
+        setEditingAdmin(admin);
+        setEditForm({
+            name: admin.name || '',
+            phone: admin.phone || '',
+            role: admin.role || 'admin',
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleCloseEditModal = () => {
+        setIsEditModalOpen(false);
         setEditingAdmin(null);
-        setFormData({ name: '', email: '', phone: '', password: '', role: 'admin' });
+        setEditForm({ name: '', phone: '', role: 'admin' });
     };
 
-    const handleSubmit = async (e) => {
+    // Open Add Existing User Modal
+    const handleOpenAddExistingModal = () => {
+        setAddExistingForm({ email: '', phone: '' });
+        setSearchMethod('email');
+        setIsAddExistingModalOpen(true);
+    };
+
+    const handleCloseAddExistingModal = () => {
+        setIsAddExistingModalOpen(false);
+        setAddExistingForm({ email: '', phone: '' });
+    };
+
+    // CREATE NEW ADMIN (Super Admin only)
+    const handleCreateAdmin = async (e) => {
         e.preventDefault();
-        if (!formData.name.trim()) return toast.error('Name is required');
-        if (!formData.email.trim()) return toast.error('Email is required');
-        if (!editingAdmin && (!formData.password || formData.password.length < 6))
+        
+        if (!createForm.name.trim()) return toast.error('Name is required');
+        if (!createForm.email.trim()) return toast.error('Email is required');
+        if (!createForm.password || createForm.password.length < 6) {
             return toast.error('Password must be at least 6 characters');
+        }
 
         setLoading(true);
         try {
             const payload = {
-                name: formData.name.trim(),
-                email: formData.email.trim(),
-                phone: formData.phone || '',
-                role: formData.role,
+                name: createForm.name.trim(),
+                email: createForm.email.trim(),
+                phone: createForm.phone || '',
+                password: createForm.password,
+                role: createForm.role,
             };
-            if (!editingAdmin) payload.password = formData.password;
 
-            if (editingAdmin) {
-                const response = await apiClient.put(`/admin/${editingAdmin._id}`, payload);
-                if (response.data.success) {
-                    toast.success('Admin updated successfully');
-                    fetchAdmins();
-                    handleCloseModal();
-                }
-            } else {
-                const response = await apiClient.post('/admin/create', payload);
-                if (response.data.success) {
-                    toast.success('Admin created successfully');
-                    fetchAdmins();
-                    handleCloseModal();
-                }
+            const response = await apiClient.post('/admin/create', payload);
+            if (response.data.success) {
+                toast.success(response.data.message || 'Admin created successfully');
+                fetchAdmins();
+                handleCloseCreateModal();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to save admin');
+            toast.error(error.response?.data?.message || 'Failed to create admin');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleBlockToggle = async (admin) => {
-        if (admin.role === 'super_admin') return toast.error('Cannot block Super Admin');
-        const action = admin.isBlocked ? 'unblock' : 'block';
-        if (!window.confirm(`Are you sure you want to ${action} this admin?`)) return;
+    // UPDATE ADMIN (Super Admin only)
+    const handleUpdateAdmin = async (e) => {
+        e.preventDefault();
+        
+        if (!editForm.name.trim()) return toast.error('Name is required');
 
         setLoading(true);
         try {
-            const response = await apiClient.post(`/admin/${admin._id}/${action}`);
+            const payload = {
+                name: editForm.name.trim(),
+                phone: editForm.phone || '',
+                role: editForm.role,
+            };
+
+            const response = await apiClient.put(`/admin/${editingAdmin._id}`, payload);
             if (response.data.success) {
-                toast.success(`Admin ${action}ed successfully`);
+                toast.success(response.data.message || 'Admin updated successfully');
                 fetchAdmins();
+                handleCloseEditModal();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Operation failed');
+            toast.error(error.response?.data?.message || 'Failed to update admin');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDelete = async (admin) => {
-        if (admin.role === 'super_admin') return toast.error('Cannot delete Super Admin');
-        if (!window.confirm('Are you sure you want to delete this admin?')) return;
+    // BLOCK ADMIN (Super Admin only)
+    const handleBlockAdmin = async (admin) => {
+        if (admin.role === 'super_admin') {
+            return toast.error('Cannot block a Super Admin');
+        }
+        
+        if (!window.confirm(`Are you sure you want to block ${admin.name}?`)) return;
+
+        setLoading(true);
+        try {
+            const response = await apiClient.post(`/admin/${admin._id}/block`);
+            if (response.data.success) {
+                toast.success(response.data.message || 'Admin blocked successfully');
+                fetchAdmins();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to block admin');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // UNBLOCK ADMIN (Super Admin only)
+    const handleUnblockAdmin = async (admin) => {
+        if (!window.confirm(`Are you sure you want to unblock ${admin.name}?`)) return;
+
+        setLoading(true);
+        try {
+            const response = await apiClient.post(`/admin/${admin._id}/unblock`);
+            if (response.data.success) {
+                toast.success(response.data.message || 'Admin unblocked successfully');
+                fetchAdmins();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to unblock admin');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // DELETE ADMIN (Super Admin only)
+    const handleDeleteAdmin = async (admin) => {
+        if (admin.role === 'super_admin') {
+            const superAdminCount = admins.filter(a => a.role === 'super_admin').length;
+            if (superAdminCount === 1) {
+                return toast.error('Cannot delete the only Super Admin');
+            }
+        }
+        
+        if (!window.confirm(`Are you sure you want to delete ${admin.name}? This action cannot be undone.`)) return;
 
         setLoading(true);
         try {
             const response = await apiClient.delete(`/admin/${admin._id}`);
             if (response.data.success) {
-                toast.success('Admin deleted successfully');
+                toast.success(response.data.message || 'Admin deleted successfully');
                 fetchAdmins();
             }
         } catch (error) {
@@ -196,15 +283,25 @@ const ManageAdmins = () => {
                             Total {admins.length} admin {admins.length === 1 ? 'user' : 'users'}
                         </p>
                     </div>
-                    <button
-                        onClick={() => handleOpenModal()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
-                    >
-                        <Plus className="h-5 w-5" />
-                        Add New Admin
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                        <button
+                            onClick={handleOpenAddExistingModal}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
+                        >
+                            <UserPlus className="h-5 w-5" />
+                            Add Existing User
+                        </button>
+                        <button
+                            onClick={handleOpenCreateModal}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
+                        >
+                            <Plus className="h-5 w-5" />
+                            Create New Admin
+                        </button>
+                    </div>
                 </div>
 
+                {/* Admin Cards Grid */}
                 {admins.length === 0 ? (
                     <div className="text-center py-16 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-amber-200/40">
                         <Users className="h-12 w-12 text-amber-400 mx-auto mb-3" />
@@ -212,92 +309,131 @@ const ManageAdmins = () => {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {admins.map((admin, idx) => (
-                            <motion.div
-                                key={admin._id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.05 }}
-                                whileHover={{ y: -4 }}
-                            >
-                                <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-md border ${admin.isBlocked ? 'border-red-200/50 opacity-75' : 'border-amber-200/40'} overflow-hidden transition-all duration-300`}>
-                                    <div className={`h-1.5 w-full ${admin.role === 'super_admin' ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-gradient-to-r from-amber-400 to-amber-600'}`} />
+                        {admins.map((admin, idx) => {
+                            const isSuperAdmin = admin.role === 'super_admin';
+                            const isBlocked = admin.isBlocked;
 
-                                    {admin.isBlocked && (
-                                        <div className="absolute top-4 right-4">
-                                            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                                <Ban className="h-3 w-3" /> Blocked
-                                            </span>
-                                        </div>
-                                    )}
+                            return (
+                                <motion.div
+                                    key={admin._id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                    whileHover={{ y: -4 }}
+                                >
+                                    <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-md border ${isBlocked ? 'border-red-200/50 opacity-75' : 'border-amber-200/40'} overflow-hidden transition-all duration-300`}>
+                                        <div className={`h-1.5 w-full ${
+                                            isSuperAdmin ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 
+                                            isBlocked ? 'bg-gradient-to-r from-red-400 to-red-600' :
+                                            'bg-gradient-to-r from-amber-400 to-amber-600'
+                                        }`} />
 
-                                    <div className="p-5">
-                                        <div className="flex items-center justify-center mb-4">
-                                            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center shadow-inner">
-                                                <User className="h-10 w-10 text-amber-700" />
+                                        {isBlocked && (
+                                            <div className="absolute top-4 right-4">
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                                    <Ban className="h-3 w-3" /> Blocked
+                                                </span>
                                             </div>
-                                        </div>
+                                        )}
 
-                                        <h3 className="text-xl font-bold text-gray-900 dark:text-white text-center mb-1">
-                                            {admin.name}
-                                        </h3>
-                                        <div className="text-center mb-4">
-                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${admin.role === 'super_admin' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                <Shield className="h-3 w-3" />
-                                                {admin.role === 'super_admin' ? 'Super Admin' : 'Admin'}
-                                            </span>
-                                        </div>
-
-                                        <div className="space-y-2 text-sm">
-                                            <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                                                <Mail className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                                                <span className="truncate">{admin.email}</span>
-                                            </div>
-                                            {admin.phone && (
-                                                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                                                    <Phone className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                                                    <span>{admin.phone}</span>
+                                        <div className="p-5">
+                                            <div className="flex items-center justify-center mb-4">
+                                                <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${
+                                                    isSuperAdmin ? 'from-purple-100 to-purple-200' : 
+                                                    isBlocked ? 'from-red-100 to-red-200' :
+                                                    'from-amber-100 to-amber-200'
+                                                } flex items-center justify-center shadow-inner`}>
+                                                    <User className={`h-10 w-10 ${
+                                                        isSuperAdmin ? 'text-purple-700' : 
+                                                        isBlocked ? 'text-red-700' :
+                                                        'text-amber-700'
+                                                    }`} />
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
 
-                                        <div className="flex gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                            <button
-                                                onClick={() => handleOpenModal(admin)}
-                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
-                                            >
-                                                <Edit className="h-4 w-4" /> Edit
-                                            </button>
-                                            {admin.role !== 'super_admin' && (
-                                                <>
+                                            <h3 className="text-xl font-bold text-gray-900 dark:text-white text-center mb-1">
+                                                {admin.name}
+                                            </h3>
+                                            <div className="text-center mb-4">
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${
+                                                    isSuperAdmin ? 'bg-purple-100 text-purple-700' : 
+                                                    isBlocked ? 'bg-red-100 text-red-700' :
+                                                    'bg-amber-100 text-amber-700'
+                                                }`}>
+                                                    <Shield className="h-3 w-3" />
+                                                    {isSuperAdmin ? 'Super Admin' : isBlocked ? 'Blocked' : 'Admin'}
+                                                </span>
+                                            </div>
+
+                                            <div className="space-y-2 text-sm">
+                                                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                                                    <Mail className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                                                    <span className="truncate">{admin.email}</span>
+                                                </div>
+                                                {admin.phone && (
+                                                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                                                        <Phone className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                                                        <span>{admin.phone}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-2 text-xs">
+                                                    <span className={`px-2 py-0.5 rounded-full ${
+                                                        admin.isVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                                    }`}>
+                                                        {admin.isVerified ? '✓ Verified' : '⚠ Unverified'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                                {!isBlocked && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleOpenEditModal(admin)}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                                                        >
+                                                            <Edit className="h-4 w-4" /> Edit
+                                                        </button>
+                                                    </>
+                                                )}
+                                                
+                                                {isBlocked ? (
                                                     <button
-                                                        onClick={() => handleBlockToggle(admin)}
-                                                        className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl transition-colors text-sm font-medium ${admin.isBlocked
-                                                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                                                : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                                            }`}
+                                                        onClick={() => handleUnblockAdmin(admin)}
+                                                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors text-sm font-medium"
                                                     >
-                                                        {admin.isBlocked ? <CheckCircle className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
-                                                        {admin.isBlocked ? 'Unblock' : 'Block'}
+                                                        <CheckCircle className="h-4 w-4" /> Unblock
                                                     </button>
-                                                    <button
-                                                        onClick={() => handleDelete(admin)}
-                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" /> Delete
-                                                    </button>
-                                                </>
-                                            )}
+                                                ) : (
+                                                    !isSuperAdmin && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleBlockAdmin(admin)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                            >
+                                                                <Ban className="h-4 w-4" /> Block
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteAdmin(admin)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" /> Delete
+                                                            </button>
+                                                        </>
+                                                    )
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </motion.div>
-                        ))}
+                                </motion.div>
+                            );
+                        })}
                     </div>
                 )}
 
+                {/* MODAL 1: Create New Admin */}
                 <AnimatePresence>
-                    {isModalOpen && (
+                    {isCreateModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
@@ -307,22 +443,23 @@ const ManageAdmins = () => {
                             >
                                 <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                                        {editingAdmin ? 'Edit Admin' : 'Add New Admin'}
+                                        <UserPlus className="h-5 w-5 inline mr-2 text-amber-500" />
+                                        Create New Admin
                                     </h2>
-                                    <button onClick={handleCloseModal} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                    <button onClick={handleCloseCreateModal} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                                         <X className="h-5 w-5 text-gray-500" />
                                     </button>
                                 </div>
 
-                                <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                                <form onSubmit={handleCreateAdmin} className="p-5 space-y-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                             Full Name <span className="text-red-500">*</span>
                                         </label>
                                         <input
                                             type="text"
-                                            value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                            value={createForm.name}
+                                            onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                                             placeholder="John Doe"
                                             required
@@ -335,8 +472,8 @@ const ManageAdmins = () => {
                                         </label>
                                         <input
                                             type="email"
-                                            value={formData.email}
-                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                            value={createForm.email}
+                                            onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                                             placeholder="admin@example.com"
                                             required
@@ -349,49 +486,51 @@ const ManageAdmins = () => {
                                         </label>
                                         <input
                                             type="tel"
-                                            value={formData.phone}
-                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                            value={createForm.phone}
+                                            onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                                             placeholder="+91 1234567890"
                                         />
                                     </div>
 
-                                    {!editingAdmin && (
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Password <span className="text-red-500">*</span>
-                                            </label>
-                                            <input
-                                                type="password"
-                                                value={formData.password}
-                                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                                placeholder="Minimum 6 characters"
-                                                minLength={6}
-                                            />
-                                        </div>
-                                    )}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Password <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="password"
+                                            value={createForm.password}
+                                            onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            placeholder="Minimum 6 characters"
+                                            minLength={6}
+                                            required
+                                        />
+                                    </div>
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
                                         <select
-                                            value={formData.role}
-                                            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                                            value={createForm.role}
+                                            onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            disabled={editingAdmin?.role === 'super_admin'}
                                         >
                                             <option value="admin">Admin</option>
                                             <option value="super_admin">Super Admin</option>
                                         </select>
-                                        {editingAdmin?.role === 'super_admin' && (
-                                            <p className="text-xs text-gray-400 mt-1">Super Admin role cannot be changed</p>
-                                        )}
+                                    </div>
+
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl">
+                                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                                            <Info className="h-4 w-4 inline mr-1" />
+                                            New admin will be created with verified status
+                                        </p>
                                     </div>
 
                                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
                                         <button
                                             type="button"
-                                            onClick={handleCloseModal}
+                                            onClick={handleCloseCreateModal}
                                             className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition"
                                         >
                                             Cancel
@@ -401,10 +540,228 @@ const ManageAdmins = () => {
                                             disabled={loading}
                                             className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50"
                                         >
-                                            {loading ? 'Saving...' : (editingAdmin ? 'Update Admin' : 'Create Admin')}
+                                            {loading ? 'Creating...' : 'Create Admin'}
                                         </button>
                                     </div>
                                 </form>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+
+                {/* MODAL 2: Edit Admin */}
+                <AnimatePresence>
+                    {isEditModalOpen && editingAdmin && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-amber-200/50"
+                            >
+                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                        <Edit className="h-5 w-5 inline mr-2 text-amber-500" />
+                                        Edit {editingAdmin.name}
+                                    </h2>
+                                    <button onClick={handleCloseEditModal} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                        <X className="h-5 w-5 text-gray-500" />
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleUpdateAdmin} className="p-5 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Full Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editForm.name}
+                                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            placeholder="John Doe"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Email
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={editingAdmin.email}
+                                            disabled
+                                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                                        />
+                                        <p className="text-xs text-gray-400 mt-1">Email cannot be changed</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Phone Number
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            value={editForm.phone}
+                                            onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            placeholder="+91 1234567890"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
+                                        <select
+                                            value={editForm.role}
+                                            onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            disabled={editingAdmin.role === 'super_admin'}
+                                        >
+                                            <option value="admin">Admin</option>
+                                            <option value="super_admin">Super Admin</option>
+                                        </select>
+                                        {editingAdmin.role === 'super_admin' && (
+                                            <p className="text-xs text-gray-400 mt-1">Super Admin role cannot be changed</p>
+                                        )}
+                                    </div>
+
+                                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                        <button
+                                            type="button"
+                                            onClick={handleCloseEditModal}
+                                            className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={loading}
+                                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                                        >
+                                            {loading ? 'Updating...' : 'Update Admin'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+
+                {/* MODAL 3: Add Existing User as Admin */}
+                <AnimatePresence>
+                    {isAddExistingModalOpen && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-green-200/50"
+                            >
+                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                                        <UserCheck className="h-5 w-5 inline mr-2 text-green-500" />
+                                        Add Existing User as Admin
+                                    </h2>
+                                    <button onClick={handleCloseAddExistingModal} className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                                        <X className="h-5 w-5 text-gray-500" />
+                                    </button>
+                                </div>
+
+                                <div className="p-5">
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mb-4">
+                                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                                            <Info className="h-4 w-4 inline mr-1" />
+                                            Find an existing user by email or phone to promote them as admin
+                                        </p>
+                                    </div>
+
+                                    <form onSubmit={handleCreateAdmin} className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                Search by
+                                            </label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSearchMethod('email')}
+                                                    className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition ${
+                                                        searchMethod === 'email'
+                                                            ? 'bg-green-500 text-white'
+                                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    Email
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSearchMethod('phone')}
+                                                    className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition ${
+                                                        searchMethod === 'phone'
+                                                            ? 'bg-green-500 text-white'
+                                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    Phone
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {searchMethod === 'email' ? (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                    Email <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    value={addExistingForm.email}
+                                                    onChange={(e) => setAddExistingForm({ ...addExistingForm, email: e.target.value, phone: '' })}
+                                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                    placeholder="user@example.com"
+                                                    required={searchMethod === 'email'}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                    Phone Number <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="tel"
+                                                    value={addExistingForm.phone}
+                                                    onChange={(e) => setAddExistingForm({ ...addExistingForm, phone: e.target.value, email: '' })}
+                                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                    placeholder="+91 1234567890"
+                                                    required={searchMethod === 'phone'}
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-xl">
+                                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                                                <AlertCircle className="h-4 w-4 inline mr-1" />
+                                                User must already be registered and verified
+                                            </p>
+                                        </div>
+
+                                        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                            <button
+                                                type="button"
+                                                onClick={handleCloseAddExistingModal}
+                                                className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 transition"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={loading}
+                                                className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                                            >
+                                                {loading ? 'Processing...' : 'Add as Admin'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
                             </motion.div>
                         </div>
                     )}
