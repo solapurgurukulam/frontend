@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Plus, Edit, Trash2, Search, X, Music, Clock, TrendingUp, Star, Languages, Info, ArrowRight, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Music, Star, Languages, TrendingUp, ArrowRight, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 30000,
+    timeout: 60000,
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
 });
@@ -43,27 +43,11 @@ apiClient.interceptors.response.use(
 );
 
 const Loader = () => (
-    <div className="flex flex-col justify-center items-center py-20">
+    <div className="flex justify-center items-center py-20">
         <div className="relative w-12 h-12">
             <div className="absolute inset-0 rounded-full border-4 border-amber-200 dark:border-gray-700"></div>
             <div className="absolute inset-0 rounded-full border-4 border-t-amber-600 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
         </div>
-        <p className="mt-4 text-gray-500 dark:text-gray-400 text-sm">Loading mantras...</p>
-    </div>
-);
-
-const ErrorDisplay = ({ message, onRetry }) => (
-    <div className="text-center py-16 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-red-200/40">
-        <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-3" />
-        <p className="text-gray-600 dark:text-gray-300 font-medium">{message}</p>
-        {onRetry && (
-            <button
-                onClick={onRetry}
-                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition"
-            >
-                <RefreshCw className="h-4 w-4" /> Retry
-            </button>
-        )}
     </div>
 );
 
@@ -85,6 +69,19 @@ const getCategoryColor = (categoryName) => {
     if (name.includes('saraswati')) return 'from-blue-100 to-indigo-200';
     if (name.includes('hanuman')) return 'from-orange-100 to-red-200';
     return 'from-amber-100 to-orange-200';
+};
+
+const getBorderColor = (categoryName) => {
+    if (!categoryName) return 'border-amber-200';
+    const name = categoryName.toLowerCase();
+    if (name.includes('shiva') || name.includes('mahadev')) return 'border-indigo-300';
+    if (name.includes('ganesh')) return 'border-red-300';
+    if (name.includes('durga')) return 'border-pink-300';
+    if (name.includes('vishnu')) return 'border-teal-300';
+    if (name.includes('lakshmi')) return 'border-yellow-300';
+    if (name.includes('saraswati')) return 'border-blue-300';
+    if (name.includes('hanuman')) return 'border-orange-300';
+    return 'border-amber-300';
 };
 
 const EMPTY_FORM = {
@@ -110,84 +107,52 @@ const ManageMantras = () => {
     const [mantras, setMantras] = useState([]);
     const [categoriesList, setCategoriesList] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingMantra, setEditingMantra] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [formData, setFormData] = useState(EMPTY_FORM);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [fetchError, setFetchError] = useState(null);
-    const [validationErrors, setValidationErrors] = useState({});
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        setFetchError(null);
-        
+    useEffect(() => { fetchCategories(); fetchMantras(); }, []);
+
+    const fetchCategories = async () => {
         try {
-            const [categoriesResponse, mantrasResponse] = await Promise.all([
-                apiClient.get('/categories?limit=100').catch(() => ({ data: { success: false, data: [] } })),
-                apiClient.get('/mantras?limit=100').catch(() => ({ data: { success: false, data: [] } }))
-            ]);
-
-            if (categoriesResponse.data.success) {
-                setCategoriesList(categoriesResponse.data.data || []);
-            }
-
-            if (mantrasResponse.data.success) {
-                setMantras(mantrasResponse.data.data || []);
-            } else {
-                setMantras([]);
-            }
+            const response = await apiClient.get('/categories?limit=100');
+            if (response.data.success) setCategoriesList(response.data.data || []);
         } catch (error) {
-            console.error('Fetch data error:', error);
-            setFetchError('Failed to load data. Please try again.');
+            toast.error('Failed to fetch categories');
+        }
+    };
+
+    const fetchMantras = async () => {
+        setLoading(true);
+        try {
+            const response = await apiClient.get('/mantras?limit=100');
+            if (response.data.success) setMantras(response.data.data || []);
+            else setMantras([]);
+        } catch (error) {
+            toast.error('Failed to fetch mantras');
             setMantras([]);
-            setCategoriesList([]);
         } finally {
             setLoading(false);
         }
-    }, []);
-
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
-    const validateForm = () => {
-        const errors = {};
-        
-        if (!formData.name?.trim()) errors.name = 'Mantra name is required';
-        if (!formData.category) errors.category = 'Please select a category';
-        if (!formData.sanskrit?.trim()) errors.sanskrit = 'Sanskrit text is required';
-        if (!formData.kannada?.trim()) errors.kannada = 'Kannada translation is required';
-        if (!formData.marathi?.trim()) errors.marathi = 'Marathi translation is required';
-        if (!formData.tamil?.trim()) errors.tamil = 'Telugu translation is required';
-        if (!formData.benefits?.trim()) errors.benefits = 'Benefits are required';
-        if (!formData.howToChant?.trim()) errors.howToChant = 'How to chant is required';
-        if (!formData.bestTime?.trim()) errors.bestTime = 'Best time is required';
-        
-        setValidationErrors(errors);
-        return Object.keys(errors).length === 0;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError(null);
-        setValidationErrors({});
-
-        if (categoriesList.length === 0) {
-            toast.error('No categories available. Please create a category first.');
-            return;
-        }
-
-        if (!validateForm()) {
-            const firstError = Object.values(validationErrors)[0];
-            toast.error(firstError);
-            return;
-        }
-
-        setIsSubmitting(true);
         
+        // Validate all required fields
+        if (!formData.name?.trim()) return toast.error('Mantra name is required');
+        if (!formData.category) return toast.error('Please select a category');
+        if (!formData.sanskrit?.trim()) return toast.error('Sanskrit text is required');
+        if (!formData.kannada?.trim()) return toast.error('Kannada translation is required');
+        if (!formData.marathi?.trim()) return toast.error('Marathi translation is required');
+        if (!formData.tamil?.trim()) return toast.error('Telugu translation is required');
+        if (!formData.benefits?.trim()) return toast.error('Benefits are required');
+        if (!formData.howToChant?.trim()) return toast.error('How to chant is required');
+        if (!formData.bestTime?.trim()) return toast.error('Best time is required');
+
+        setLoading(true);
         try {
             const payload = {
                 name: formData.name.trim(),
@@ -195,84 +160,59 @@ const ManageMantras = () => {
                 kannada: formData.kannada.trim(),
                 marathi: formData.marathi.trim(),
                 tamil: formData.tamil.trim(),
-                hindi: formData.hindi?.trim() || '',
-                english: formData.english?.trim() || '',
+                hindi: formData.hindi || '',
+                english: formData.english || '',
                 benefits: formData.benefits.trim(),
                 howToChant: formData.howToChant.trim(),
                 bestTime: formData.bestTime.trim(),
                 recommendedCount: parseInt(formData.recommendedCount) || 108,
-                meaning: formData.meaning?.trim() || '',
-                audioUrl: formData.audioUrl?.trim() || '',
+                meaning: formData.meaning || '',
+                audioUrl: formData.audioUrl || '',
                 category: formData.category,
                 order: parseInt(formData.order) || 0,
                 isFeatured: formData.isFeatured || false,
+                isActive: true,
             };
 
-            // Log the payload for debugging
-            console.log('Sending payload:', JSON.stringify(payload, null, 2));
+            console.log('🟢 Sending Mantra payload:', JSON.stringify(payload, null, 2));
 
-            let response;
             if (editingMantra) {
-                response = await apiClient.put(`/mantras/${editingMantra._id}`, payload);
+                const response = await apiClient.put(`/mantras/${editingMantra._id}`, payload);
                 if (response.data.success) {
-                    toast.success('Mantra updated successfully!');
-                    await fetchData();
+                    toast.success('Mantra updated!');
+                    fetchMantras();
                     closeForm();
                 }
             } else {
-                response = await apiClient.post('/mantras', payload);
+                const response = await apiClient.post('/mantras', payload);
                 if (response.data.success) {
-                    toast.success('Mantra created successfully!');
-                    await fetchData();
+                    toast.success('Mantra created!');
+                    fetchMantras();
                     closeForm();
                 }
             }
         } catch (error) {
-            console.error('Save mantra error:', error);
-            
-            let errorMsg = 'Failed to save mantra. Please try again.';
-            
-            if (error.response) {
-                console.error('Response data:', error.response.data);
-                console.error('Response status:', error.response.status);
-                
-                if (error.response.data?.message) {
-                    errorMsg = error.response.data.message;
-                    if (errorMsg.toLowerCase().includes('already exists')) {
-                        errorMsg = 'A mantra with this name already exists. Please use a different name.';
-                    }
-                } else if (error.response.status === 400) {
-                    errorMsg = 'Validation error. Please check all required fields.';
-                } else if (error.response.status === 403) {
-                    errorMsg = 'You do not have permission to perform this action.';
-                } else if (error.response.status === 500) {
-                    errorMsg = 'Server error. Please check the console for more details.';
-                }
-            } else if (error.request) {
-                errorMsg = 'No response from server. Please check your connection.';
-            }
-            
-            toast.error(errorMsg);
-            setError(errorMsg);
+            console.error('❌ Error details:', error.response?.data || error.message);
+            console.error('❌ Status:', error.response?.status);
+            toast.error(error.response?.data?.message || 'Failed to save mantra');
         } finally {
-            setIsSubmitting(false);
+            setLoading(false);
         }
     };
 
-    const handleDelete = async (id, name) => {
-        if (!window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
-            return;
-        }
-        
+    const handleDelete = async (id) => {
+        if (!window.confirm('Are you sure you want to delete this mantra?')) return;
+        setLoading(true);
         try {
             const response = await apiClient.delete(`/mantras/${id}`);
             if (response.data.success) {
-                toast.success('Mantra deleted successfully!');
-                await fetchData();
+                toast.success('Mantra deleted');
+                fetchMantras();
             }
         } catch (error) {
-            console.error('Delete mantra error:', error);
             toast.error(error.response?.data?.message || 'Failed to delete mantra');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -301,104 +241,34 @@ const ManageMantras = () => {
             setEditingMantra(null);
             setFormData(EMPTY_FORM);
         }
-        setError(null);
-        setValidationErrors({});
         setShowForm(true);
     };
 
-    const closeForm = () => {
-        setShowForm(false);
-        setEditingMantra(null);
-        setError(null);
-        setValidationErrors({});
-    };
+    const closeForm = () => { setShowForm(false); setEditingMantra(null); };
 
-    const getCategoryName = useCallback((cat) => {
-        if (!cat) return 'Unknown';
+    const getCategoryName = (cat) => {
         if (cat?.name) return cat.name;
         const found = categoriesList.find(c => c._id === cat);
         return found ? found.name : 'Unknown';
-    }, [categoriesList]);
-
-    const filteredMantras = useMemo(() => {
-        return (mantras || []).filter(m => {
-            const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                               m.sanskrit?.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchCategory = !selectedCategory || 
-                                 m.category?._id === selectedCategory || 
-                                 m.category === selectedCategory;
-            return matchSearch && matchCategory;
-        });
-    }, [mantras, searchTerm, selectedCategory]);
-
-    const field = (label, key, type = 'text', required = false, rows = null, placeholder = '') => {
-        const hasError = validationErrors[key];
-        
-        return (
-            <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                    {label} {required && <span className="text-red-500">*</span>}
-                </label>
-                {rows ? (
-                    <textarea
-                        value={formData[key] || ''}
-                        onChange={e => {
-                            setFormData({ ...formData, [key]: e.target.value });
-                            if (validationErrors[key]) {
-                                setValidationErrors({ ...validationErrors, [key]: '' });
-                            }
-                        }}
-                        rows={rows}
-                        placeholder={placeholder}
-                        className={`w-full px-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
-                        required={required}
-                    />
-                ) : type === 'number' ? (
-                    <input
-                        type="number"
-                        value={formData[key] || 0}
-                        onChange={e => {
-                            const value = e.target.value;
-                            setFormData({ ...formData, [key]: value });
-                            if (validationErrors[key]) {
-                                setValidationErrors({ ...validationErrors, [key]: '' });
-                            }
-                        }}
-                        placeholder={placeholder}
-                        className={`w-full px-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
-                        required={required}
-                        min="0"
-                        step="1"
-                    />
-                ) : (
-                    <input
-                        type={type}
-                        value={formData[key] || ''}
-                        onChange={e => {
-                            setFormData({ ...formData, [key]: e.target.value });
-                            if (validationErrors[key]) {
-                                setValidationErrors({ ...validationErrors, [key]: '' });
-                            }
-                        }}
-                        placeholder={placeholder}
-                        className={`w-full px-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
-                        required={required}
-                    />
-                )}
-                {hasError && (
-                    <p className="text-red-500 text-xs mt-1">{hasError}</p>
-                )}
-            </div>
-        );
     };
 
-    if (loading && mantras.length === 0) {
-        return <Loader />;
-    }
+    const filteredMantras = (mantras || []).filter(m => {
+        const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            m.sanskrit?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchCategory = !selectedCategory || m.category?._id === selectedCategory || m.category === selectedCategory;
+        return matchSearch && matchCategory;
+    });
 
-    if (fetchError) {
-        return <ErrorDisplay message={fetchError} onRetry={fetchData} />;
-    }
+    if (loading && mantras.length === 0) return <Loader />;
+
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: { opacity: 1, transition: { staggerChildren: 0.05, delayChildren: 0.1 } }
+    };
+    const cardVariants = {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 p-6 md:p-8">
@@ -411,13 +281,12 @@ const ManageMantras = () => {
                         </div>
                         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Mantras</h1>
                         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                            {filteredMantras.length} of {mantras.length} {mantras.length === 1 ? 'mantra' : 'mantras'} displayed
+                            {mantras.length} {mantras.length === 1 ? 'mantra' : 'mantras'} total
                         </p>
                     </div>
                     <button
                         onClick={() => openForm()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 disabled:opacity-50"
-                        disabled={loading}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
                     >
                         <Plus className="h-5 w-5" />
                         Add Mantra
@@ -429,7 +298,7 @@ const ManageMantras = () => {
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-400" />
                         <input
                             type="text"
-                            placeholder="Search by name or Sanskrit text..."
+                            placeholder="Search mantras by name or Sanskrit text..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-amber-200/50 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition shadow-sm"
@@ -441,18 +310,8 @@ const ManageMantras = () => {
                         className="px-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-amber-200/50 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition shadow-sm sm:w-64"
                     >
                         <option value="">All Categories</option>
-                        {categoriesList.map(c => (
-                            <option key={c._id} value={c._id}>{c.name}</option>
-                        ))}
+                        {categoriesList.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                     </select>
-                    {(searchTerm || selectedCategory) && (
-                        <button
-                            onClick={() => { setSearchTerm(''); setSelectedCategory(''); }}
-                            className="px-4 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition"
-                        >
-                            <X className="h-5 w-5" />
-                        </button>
-                    )}
                 </div>
 
                 {filteredMantras.length === 0 ? (
@@ -463,103 +322,112 @@ const ManageMantras = () => {
                         </p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredMantras.map((m) => {
+                    <motion.div
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                    >
+                        {filteredMantras.map((m, idx) => {
                             const categoryName = getCategoryName(m.category);
                             const cat = categoriesList.find(c => c._id === (m.category?._id || m.category));
                             const catImage = cat?.image ? getImageUrl(cat.image) : null;
                             const gradientBg = getCategoryColor(categoryName);
+                            const borderColor = getBorderColor(categoryName);
+                            const fallbackIcon = catImage ? null : (categoryName ? categoryName.charAt(0).toUpperCase() : '?');
 
                             return (
-                                <motion.div
-                                    key={m._id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                    whileHover={{ y: -4 }}
-                                    className="group bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 border hover:border-amber-400/60"
-                                >
-                                    <div className={`h-1.5 w-full bg-gradient-to-r ${gradientBg}`} />
-                                    
-                                    <div className="p-5">
-                                        <div className="flex items-start gap-3">
-                                            <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40 flex items-center justify-center shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-white/50">
-                                                {catImage ? (
-                                                    <img
-                                                        src={catImage}
-                                                        alt={categoryName}
-                                                        className="w-full h-full object-cover"
-                                                        onError={(e) => {
-                                                            e.target.style.display = 'none';
-                                                            const parent = e.target.parentElement;
-                                                            parent.innerHTML = `<span class="text-xl font-bold text-amber-700">${categoryName.charAt(0).toUpperCase()}</span>`;
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <span className="text-xl font-bold text-amber-700">{categoryName.charAt(0).toUpperCase()}</span>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-amber-600 transition-colors line-clamp-1">
-                                                    {m.name}
-                                                </h3>
-                                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                                    <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full">
-                                                        {categoryName}
-                                                    </span>
-                                                    {m.isFeatured && (
-                                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
-                                                            <Star className="h-3 w-3" /> Featured
-                                                        </span>
+                                <motion.div key={m._id} variants={cardVariants} whileHover={{ y: -4, transition: { type: 'spring', stiffness: 200 } }}>
+                                    <div className={`group bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 border ${borderColor} hover:border-amber-400/60`}>
+                                        <div className={`h-1.5 w-full bg-gradient-to-r ${gradientBg}`} />
+
+                                        <div className="p-5">
+                                            <div className="flex items-start gap-3">
+                                                <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40 flex items-center justify-center shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-white/50">
+                                                    {catImage ? (
+                                                        <img
+                                                            src={catImage}
+                                                            alt={categoryName}
+                                                            className="w-full h-full object-cover"
+                                                            onError={(e) => {
+                                                                e.target.style.display = 'none';
+                                                                const parent = e.target.parentElement;
+                                                                parent.innerHTML = `<span class="text-xl font-bold text-amber-700">${fallbackIcon}</span>`;
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-xl font-bold text-amber-700">{fallbackIcon}</span>
                                                     )}
                                                 </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-amber-600 transition-colors line-clamp-1">
+                                                        {m.name}
+                                                    </h3>
+                                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                        <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full">
+                                                            {categoryName}
+                                                        </span>
+                                                        {m.isFeatured && (
+                                                            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                                                <Star className="h-3 w-3" /> Featured
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-1.5 flex-shrink-0">
+                                                    <button
+                                                        onClick={() => openForm(m)}
+                                                        className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition-colors"
+                                                        title="Edit"
+                                                    >
+                                                        <Edit className="h-3.5 w-3.5 text-blue-600" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(m._id)}
+                                                        className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition-colors"
+                                                        title="Delete"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="flex gap-1.5 flex-shrink-0">
-                                                <button
-                                                    onClick={() => openForm(m)}
-                                                    className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition-colors"
-                                                    title="Edit"
-                                                >
-                                                    <Edit className="h-3.5 w-3.5 text-blue-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(m._id, m.name)}
-                                                    className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                                </button>
+
+                                            {m.sanskrit && (
+                                                <div className="mt-3 font-devanagari text-sm text-gray-600 dark:text-gray-300 line-clamp-2 bg-amber-50/40 dark:bg-amber-900/10 rounded-xl px-3 py-2 leading-relaxed">
+                                                    {m.sanskrit.slice(0, 120)}
+                                                    {m.sanskrit.length > 120 && '...'}
+                                                </div>
+                                            )}
+
+                                            {m.benefits && (
+                                                <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm line-clamp-2">
+                                                    {m.benefits.slice(0, 80)}...
+                                                </p>
+                                            )}
+
+                                            <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
+                                                <span className="flex items-center gap-1">
+                                                    <Clock className="h-3.5 w-3.5" /> {m.bestTime || 'Any time'}
+                                                </span>
+                                                <span className="flex items-center gap-1">
+                                                    <TrendingUp className="h-3.5 w-3.5" /> {m.recommendedCount || 108}
+                                                </span>
+                                                <span className="flex items-center gap-1">
+                                                    👁 {(m.views || 0).toLocaleString()}
+                                                </span>
                                             </div>
-                                        </div>
 
-                                        {m.sanskrit && (
-                                            <div className="mt-3 font-devanagari text-sm text-gray-600 dark:text-gray-300 line-clamp-2 bg-amber-50/40 dark:bg-amber-900/10 rounded-xl px-3 py-2 leading-relaxed">
-                                                {m.sanskrit}
+                                            <div className="mt-3 flex justify-end">
+                                                <span className="text-amber-600 text-xs font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
+                                                    View <ArrowRight className="h-3.5 w-3.5" />
+                                                </span>
                                             </div>
-                                        )}
-
-                                        {m.benefits && (
-                                            <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm line-clamp-2 leading-relaxed">
-                                                {m.benefits}
-                                            </p>
-                                        )}
-
-                                        <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
-                                            <span className="flex items-center gap-1">
-                                                <Clock className="h-3.5 w-3.5" /> {m.bestTime || 'Any time'}
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <TrendingUp className="h-3.5 w-3.5" /> {m.recommendedCount || 108}
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                👁 {(m.views || 0).toLocaleString()}
-                                            </span>
                                         </div>
                                     </div>
                                 </motion.div>
                             );
                         })}
-                    </div>
+                    </motion.div>
                 )}
 
                 <AnimatePresence>
@@ -585,43 +453,62 @@ const ManageMantras = () => {
                                 </div>
 
                                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                                    {error && (
-                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
-                                            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                                            <span>{error}</span>
-                                        </div>
-                                    )}
-
-                                    {categoriesList.length === 0 && (
-                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 text-yellow-700 dark:text-yellow-400 text-sm flex items-start gap-2">
-                                            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                                            <span>⚠️ No categories available. Please create a category first before adding mantras.</span>
-                                        </div>
-                                    )}
-
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        {field('Mantra Name', 'name', 'text', true, null, 'e.g., Gayatri Mantra')}
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                                                Mantra Name <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="e.g., Gayatri Mantra"
+                                                value={formData.name}
+                                                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                                required
+                                            />
+                                        </div>
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
                                                 Category <span className="text-red-500">*</span>
                                             </label>
                                             <select
                                                 value={formData.category}
-                                                onChange={e => {
-                                                    setFormData({ ...formData, category: e.target.value });
-                                                    if (validationErrors.category) {
-                                                        setValidationErrors({ ...validationErrors, category: '' });
-                                                    }
-                                                }}
-                                                className={`w-full px-4 py-2.5 border ${validationErrors.category ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
+                                                onChange={e => setFormData({ ...formData, category: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
                                                 required
                                             >
                                                 <option value="">-- Select Category --</option>
                                                 {categoriesList.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                                             </select>
-                                            {validationErrors.category && (
-                                                <p className="text-red-500 text-xs mt-1">{validationErrors.category}</p>
+                                            {categoriesList.length === 0 && (
+                                                <p className="text-red-500 text-xs mt-1">No categories found. Create one first.</p>
                                             )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Display Order</label>
+                                            <input
+                                                type="number"
+                                                value={formData.order}
+                                                onChange={e => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                                placeholder="0"
+                                            />
+                                            <p className="text-xs text-gray-400 mt-1">Lower numbers appear first</p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                                                Recommended Count
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={formData.recommendedCount}
+                                                onChange={e => setFormData({ ...formData, recommendedCount: parseInt(e.target.value) || 108 })}
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                                placeholder="108"
+                                            />
                                         </div>
                                     </div>
 
@@ -632,116 +519,111 @@ const ManageMantras = () => {
                                         </label>
                                         <textarea
                                             value={formData.sanskrit}
-                                            onChange={e => {
-                                                setFormData({ ...formData, sanskrit: e.target.value });
-                                                if (validationErrors.sanskrit) {
-                                                    setValidationErrors({ ...validationErrors, sanskrit: '' });
-                                                }
-                                            }}
-                                            rows={4}
+                                            onChange={e => setFormData({ ...formData, sanskrit: e.target.value })}
+                                            rows={5}
                                             placeholder="संस्कृत पाठ यहाँ लिखें..."
-                                            className={`w-full px-4 py-2.5 border ${validationErrors.sanskrit ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition font-devanagari text-lg`}
+                                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition font-devanagari text-lg"
                                             required
                                         />
-                                        {validationErrors.sanskrit && (
-                                            <p className="text-red-500 text-xs mt-1">{validationErrors.sanskrit}</p>
-                                        )}
                                     </div>
 
                                     <div className="border border-amber-200 dark:border-amber-800/50 rounded-xl p-5 bg-amber-50/30 dark:bg-amber-900/10">
                                         <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-4 flex items-center gap-2">
                                             <Languages className="h-4 w-4" /> Required Translations
                                         </h3>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                                            All translations are required for multi-language support
-                                        </p>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ಕನ್ನಡ (Kannada) <span className="text-red-500">*</span></label>
-                                                <textarea 
-                                                    required 
-                                                    rows={4} 
-                                                    value={formData.kannada} 
-                                                    onChange={e => {
-                                                        setFormData({ ...formData, kannada: e.target.value });
-                                                        if (validationErrors.kannada) {
-                                                            setValidationErrors({ ...validationErrors, kannada: '' });
-                                                        }
-                                                    }}
-                                                    placeholder="Kannada translation..." 
-                                                    className={`w-full px-3 py-2 border ${validationErrors.kannada ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500`} 
-                                                />
-                                                {validationErrors.kannada && (
-                                                    <p className="text-red-500 text-xs mt-1">{validationErrors.kannada}</p>
-                                                )}
+                                                <textarea required rows={4} value={formData.kannada} onChange={e => setFormData({ ...formData, kannada: e.target.value })} placeholder="Kannada translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">मराठी (Marathi) <span className="text-red-500">*</span></label>
-                                                <textarea 
-                                                    required 
-                                                    rows={4} 
-                                                    value={formData.marathi} 
-                                                    onChange={e => {
-                                                        setFormData({ ...formData, marathi: e.target.value });
-                                                        if (validationErrors.marathi) {
-                                                            setValidationErrors({ ...validationErrors, marathi: '' });
-                                                        }
-                                                    }}
-                                                    placeholder="Marathi translation..." 
-                                                    className={`w-full px-3 py-2 border ${validationErrors.marathi ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500`} 
-                                                />
-                                                {validationErrors.marathi && (
-                                                    <p className="text-red-500 text-xs mt-1">{validationErrors.marathi}</p>
-                                                )}
+                                                <textarea required rows={4} value={formData.marathi} onChange={e => setFormData({ ...formData, marathi: e.target.value })} placeholder="Marathi translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">తెలుగు (Telugu) <span className="text-red-500">*</span></label>
-                                                <textarea 
-                                                    required 
-                                                    rows={4} 
-                                                    value={formData.tamil} 
-                                                    onChange={e => {
-                                                        setFormData({ ...formData, tamil: e.target.value });
-                                                        if (validationErrors.tamil) {
-                                                            setValidationErrors({ ...validationErrors, tamil: '' });
-                                                        }
-                                                    }}
-                                                    placeholder="Telugu translation..." 
-                                                    className={`w-full px-3 py-2 border ${validationErrors.tamil ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'} rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500`} 
-                                                />
-                                                {validationErrors.tamil && (
-                                                    <p className="text-red-500 text-xs mt-1">{validationErrors.tamil}</p>
-                                                )}
+                                                <textarea required rows={4} value={formData.tamil} onChange={e => setFormData({ ...formData, tamil: e.target.value })} placeholder="Telugu translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
                                             </div>
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        {field('हिन्दी (Hindi) - Optional', 'hindi', 'text', false, 3, 'Hindi translation...')}
-                                        {field('English Translation - Optional', 'english', 'text', false, 3, 'English translation...')}
-                                    </div>
-
-                                    {field('Benefits / लाभ', 'benefits', 'text', true, 3, 'Benefits of chanting this mantra...')}
-                                    {field('Meaning / अर्थ', 'meaning', 'text', false, 3, 'Deep meaning and explanation...')}
-                                    
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        {field('How to Chant', 'howToChant', 'text', true, 2, 'Instructions...')}
-                                        {field('Best Time', 'bestTime', 'text', true, null, 'e.g., Morning, Sunrise')}
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">हिन्दी (Hindi) - Optional</label>
+                                            <textarea rows={3} value={formData.hindi} onChange={e => setFormData({ ...formData, hindi: e.target.value })} placeholder="Hindi translation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">English Translation - Optional</label>
+                                            <textarea rows={3} value={formData.english} onChange={e => setFormData({ ...formData, english: e.target.value })} placeholder="English translation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
+                                        </div>
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        {field('Recommended Count', 'recommendedCount', 'number', false)}
-                                        {field('Display Order', 'order', 'number', false)}
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                                                Benefits / लाभ <span className="text-red-500">*</span>
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                value={formData.benefits}
+                                                onChange={e => setFormData({ ...formData, benefits: e.target.value })}
+                                                placeholder="Benefits of chanting this mantra..."
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                                                How to Chant <span className="text-red-500">*</span>
+                                            </label>
+                                            <textarea
+                                                rows={3}
+                                                value={formData.howToChant}
+                                                onChange={e => setFormData({ ...formData, howToChant: e.target.value })}
+                                                placeholder="Instructions for chanting..."
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                                required
+                                            />
+                                        </div>
                                     </div>
 
-                                    {field('Audio URL (Optional)', 'audioUrl', 'url', false, null, 'https://example.com/mantra.mp3')}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                                                Best Time <span className="text-red-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formData.bestTime}
+                                                onChange={e => setFormData({ ...formData, bestTime: e.target.value })}
+                                                placeholder="e.g., Morning, Sunrise, Evening"
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Meaning / अर्थ - Optional</label>
+                                            <textarea
+                                                rows={3}
+                                                value={formData.meaning}
+                                                onChange={e => setFormData({ ...formData, meaning: e.target.value })}
+                                                placeholder="Deep meaning and explanation..."
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Audio URL - Optional</label>
+                                        <input type="url" value={formData.audioUrl} onChange={e => setFormData({ ...formData, audioUrl: e.target.value })} placeholder="https://example.com/audio.mp3" className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
+                                    </div>
 
                                     <div className="flex items-center gap-3 pt-2">
-                                        <input 
-                                            type="checkbox" 
-                                            id="mantraFeatured" 
-                                            checked={formData.isFeatured} 
-                                            onChange={e => setFormData({ ...formData, isFeatured: e.target.checked })} 
+                                        <input
+                                            type="checkbox"
+                                            id="mantraFeatured"
+                                            checked={formData.isFeatured}
+                                            onChange={e => setFormData({ ...formData, isFeatured: e.target.checked })}
                                             className="h-4 w-4 text-amber-600 rounded focus:ring-amber-500"
                                         />
                                         <label htmlFor="mantraFeatured" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
@@ -759,17 +641,10 @@ const ManageMantras = () => {
                                         </button>
                                         <button
                                             type="submit"
-                                            disabled={isSubmitting || categoriesList.length === 0}
-                                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 flex items-center gap-2"
+                                            disabled={loading}
+                                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
                                         >
-                                            {isSubmitting ? (
-                                                <>
-                                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                                    Saving...
-                                                </>
-                                            ) : (
-                                                editingMantra ? 'Update Mantra' : 'Create Mantra'
-                                            )}
+                                            {loading ? 'Saving...' : (editingMantra ? 'Update Mantra' : 'Create Mantra')}
                                         </button>
                                     </div>
                                 </form>
