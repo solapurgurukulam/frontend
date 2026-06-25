@@ -180,11 +180,10 @@ const ManageAdmins = () => {
         }
     };
 
-    // Validation Regex
     const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     
-    // CREATE NEW ADMIN (FIXED: Now uses a registration endpoint instead of the promotion endpoint)
+    // CREATE NEW ADMIN
     const handleCreateAdmin = async (e) => {
         e.preventDefault();
         
@@ -205,8 +204,8 @@ const ManageAdmins = () => {
                 role: createForm.role,
             };
 
-            // FIX: Changed this from '/admin/create' to '/admin/register-new' or whatever your backend's user creation route is.
-            const response = await apiClient.post('/admin/register-new', payload);
+            // Pointing to /admin/create for New Admin
+            const response = await apiClient.post('/admin/create', payload);
             
             if (response.data.success) {
                 toast.success(response.data.message || 'Admin created successfully');
@@ -269,8 +268,9 @@ const ManageAdmins = () => {
                 role: 'admin'
             };
 
-            // This stays as '/admin/create' assuming this is your backend's route to find and promote a user
-            const response = await apiClient.post('/admin/create', payload);
+            // Pointing to /admin/promote for Existing User
+            const response = await apiClient.post('/admin/promote', payload);
+            
             if (response.data.success) {
                 toast.success(response.data.message || 'User promoted to Admin successfully');
                 fetchAdmins();
@@ -283,7 +283,6 @@ const ManageAdmins = () => {
         }
     };
 
-    // CUSTOM DEMOTE CONFIRMATION & EXECUTION
     const executeDemote = async (adminId) => {
         setLoading(true);
         try {
@@ -339,7 +338,6 @@ const ManageAdmins = () => {
         );
     };
 
-    // Input Handlers for Strict Validation
     const handleNameChange = (e, setForm) => {
         const value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
         setForm(prev => ({ ...prev, name: value }));
