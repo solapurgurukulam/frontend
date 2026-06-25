@@ -1,57 +1,87 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Plus, Edit, Trash2, Search, X, Music, Clock, TrendingUp, Star, Languages, Info, ArrowRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Music, Clock, TrendingUp, Star, Languages, Info, ArrowRight, AlertCircle, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 60000,
+    timeout: 30000, // Reduced timeout for faster response
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
 });
 
+// Request interceptor with retry logic
 apiClient.interceptors.request.use((config) => {
     const token = localStorage.getItem('accessToken');
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
+}, (error) => {
+    return Promise.reject(error);
 });
 
+// Response interceptor with better error handling
 apiClient.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-            try {
-                const refreshToken = localStorage.getItem('refreshToken');
-                const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-                if (response.data.success) {
-                    localStorage.setItem('accessToken', response.data.data.accessToken);
-                    originalRequest.headers.Authorization = `Bearer ${response.data.data.accessToken}`;
-                    return apiClient(originalRequest);
-                }
-            } catch (err) {
-                localStorage.clear();
-                window.location.href = '/login';
-            }
+        
+        // Don't retry if already retried or if it's a non-401 error
+        if (originalRequest._retry || error.response?.status !== 401) {
+            return Promise.reject(error);
         }
-        return Promise.reject(error);
+        
+        originalRequest._retry = true;
+        
+        try {
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (!refreshToken) {
+                throw new Error('No refresh token');
+            }
+            
+            const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+            if (response.data.success) {
+                localStorage.setItem('accessToken', response.data.data.accessToken);
+                originalRequest.headers.Authorization = `Bearer ${response.data.data.accessToken}`;
+                return apiClient(originalRequest);
+            }
+        } catch (err) {
+            // Clear tokens and redirect to login
+            localStorage.clear();
+            window.location.href = '/login';
+            return Promise.reject(err);
+        }
     }
 );
 
 const Loader = () => (
-    <div className="flex justify-center items-center py-20">
+    <div className="flex flex-col justify-center items-center py-20">
         <div className="relative w-12 h-12">
             <div className="absolute inset-0 rounded-full border-4 border-amber-200 dark:border-gray-700"></div>
             <div className="absolute inset-0 rounded-full border-4 border-t-amber-600 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
         </div>
+        <p className="mt-4 text-gray-500 dark:text-gray-400 text-sm">Loading mantras...</p>
     </div>
 );
 
-// ─── Helper: build absolute image URL ───
+const ErrorDisplay = ({ message, onRetry }) => (
+    <div className="text-center py-16 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-red-200/40">
+        <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-3" />
+        <p className="text-gray-600 dark:text-gray-300 font-medium">{message}</p>
+        {onRetry && (
+            <button
+                onClick={onRetry}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition"
+            >
+                <RefreshCw className="h-4 w-4" /> Retry
+            </button>
+        )}
+    </div>
+);
+
+// Helper: build absolute image URL
 const getImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
@@ -59,7 +89,7 @@ const getImageUrl = (path) => {
     return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 };
 
-// ─── Get a soft pastel color based on category name ───
+// Get a soft pastel color based on category name
 const getCategoryColor = (categoryName) => {
     if (!categoryName) return 'from-amber-100 to-orange-200';
     const name = categoryName.toLowerCase();
@@ -73,7 +103,7 @@ const getCategoryColor = (categoryName) => {
     return 'from-amber-100 to-orange-200';
 };
 
-// ─── Get a gradient border color ───
+// Get a gradient border color
 const getBorderColor = (categoryName) => {
     if (!categoryName) return 'border-amber-200';
     const name = categoryName.toLowerCase();
@@ -110,50 +140,95 @@ const ManageMantras = () => {
     const [mantras, setMantras] = useState([]);
     const [categoriesList, setCategoriesList] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [showForm, setShowForm] = useState(false);
     const [editingMantra, setEditingMantra] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [formData, setFormData] = useState(EMPTY_FORM);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [fetchError, setFetchError] = useState(null);
 
-    useEffect(() => { fetchCategories(); fetchMantras(); }, []);
-
-    const fetchCategories = async () => {
-        try {
-            const response = await apiClient.get('/categories?limit=100');
-            if (response.data.success) setCategoriesList(response.data.data || []);
-        } catch (error) {
-            toast.error('Failed to fetch categories');
-        }
-    };
-
-    const fetchMantras = async () => {
+    // Fetch categories and mantras with proper error handling
+    const fetchData = useCallback(async () => {
         setLoading(true);
+        setFetchError(null);
+        
         try {
-            const response = await apiClient.get('/mantras?limit=100');
-            if (response.data.success) setMantras(response.data.data || []);
-            else setMantras([]);
+            // Fetch both in parallel for better performance
+            const [categoriesResponse, mantrasResponse] = await Promise.all([
+                apiClient.get('/categories?limit=100').catch(() => ({ data: { success: false, data: [] } })),
+                apiClient.get('/mantras?limit=100').catch(() => ({ data: { success: false, data: [] } }))
+            ]);
+
+            if (categoriesResponse.data.success) {
+                setCategoriesList(categoriesResponse.data.data || []);
+            }
+
+            if (mantrasResponse.data.success) {
+                setMantras(mantrasResponse.data.data || []);
+            } else {
+                setMantras([]);
+            }
         } catch (error) {
-            toast.error('Failed to fetch mantras');
+            console.error('Fetch data error:', error);
+            setFetchError('Failed to load data. Please try again.');
             setMantras([]);
+            setCategoriesList([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    // Handle form submission
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.name?.trim()) return toast.error('Mantra name is required');
-        if (!formData.category) return toast.error('Please select a category');
-        if (!formData.sanskrit?.trim()) return toast.error('Sanskrit text is required');
-        if (!formData.kannada?.trim()) return toast.error('Kannada translation is required');
-        if (!formData.marathi?.trim()) return toast.error('Marathi translation is required');
-        if (!formData.tamil?.trim()) return toast.error('Telugu translation is required');
-        if (!formData.benefits?.trim()) return toast.error('Benefits are required');
-        if (!formData.howToChant?.trim()) return toast.error('How to chant is required');
-        if (!formData.bestTime?.trim()) return toast.error('Best time is required');
+        setError(null);
 
-        setLoading(true);
+        // Validate form
+        if (!formData.name?.trim()) {
+            toast.error('Mantra name is required');
+            return;
+        }
+        if (!formData.category) {
+            toast.error('Please select a category');
+            return;
+        }
+        if (!formData.sanskrit?.trim()) {
+            toast.error('Sanskrit text is required');
+            return;
+        }
+        if (!formData.kannada?.trim()) {
+            toast.error('Kannada translation is required');
+            return;
+        }
+        if (!formData.marathi?.trim()) {
+            toast.error('Marathi translation is required');
+            return;
+        }
+        if (!formData.tamil?.trim()) {
+            toast.error('Telugu translation is required');
+            return;
+        }
+        if (!formData.benefits?.trim()) {
+            toast.error('Benefits are required');
+            return;
+        }
+        if (!formData.howToChant?.trim()) {
+            toast.error('How to chant is required');
+            return;
+        }
+        if (!formData.bestTime?.trim()) {
+            toast.error('Best time is required');
+            return;
+        }
+
+        setIsSubmitting(true);
+        
         try {
             const payload = {
                 name: formData.name.trim(),
@@ -161,47 +236,65 @@ const ManageMantras = () => {
                 kannada: formData.kannada.trim(),
                 marathi: formData.marathi.trim(),
                 tamil: formData.tamil.trim(),
-                hindi: formData.hindi || '',
-                english: formData.english || '',
+                hindi: formData.hindi?.trim() || '',
+                english: formData.english?.trim() || '',
                 benefits: formData.benefits.trim(),
                 howToChant: formData.howToChant.trim(),
                 bestTime: formData.bestTime.trim(),
                 recommendedCount: formData.recommendedCount || 108,
-                meaning: formData.meaning || '',
-                audioUrl: formData.audioUrl || '',
+                meaning: formData.meaning?.trim() || '',
+                audioUrl: formData.audioUrl?.trim() || '',
                 category: formData.category,
                 order: parseInt(formData.order) || 0,
                 isFeatured: formData.isFeatured || false,
                 isActive: true,
             };
 
+            let response;
             if (editingMantra) {
-                const response = await apiClient.put(`/mantras/${editingMantra._id}`, payload);
-                if (response.data.success) { toast.success('Mantra updated!'); fetchMantras(); closeForm(); }
+                response = await apiClient.put(`/mantras/${editingMantra._id}`, payload);
+                if (response.data.success) {
+                    toast.success('Mantra updated successfully!');
+                    await fetchData();
+                    closeForm();
+                }
             } else {
-                const response = await apiClient.post('/mantras', payload);
-                if (response.data.success) { toast.success('Mantra created!'); fetchMantras(); closeForm(); }
+                response = await apiClient.post('/mantras', payload);
+                if (response.data.success) {
+                    toast.success('Mantra created successfully!');
+                    await fetchData();
+                    closeForm();
+                }
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to save mantra');
+            console.error('Save mantra error:', error);
+            const errorMsg = error.response?.data?.message || 'Failed to save mantra. Please try again.';
+            toast.error(errorMsg);
+            setError(errorMsg);
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this mantra?')) return;
-        setLoading(true);
+    // Handle delete
+    const handleDelete = async (id, name) => {
+        if (!window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+            return;
+        }
+        
         try {
             const response = await apiClient.delete(`/mantras/${id}`);
-            if (response.data.success) { toast.success('Mantra deleted'); fetchMantras(); }
+            if (response.data.success) {
+                toast.success('Mantra deleted successfully!');
+                await fetchData();
+            }
         } catch (error) {
+            console.error('Delete mantra error:', error);
             toast.error(error.response?.data?.message || 'Failed to delete mantra');
-        } finally {
-            setLoading(false);
         }
     };
 
+    // Open form for create/edit
     const openForm = (mantra = null) => {
         if (mantra) {
             setEditingMantra(mantra);
@@ -227,23 +320,37 @@ const ManageMantras = () => {
             setEditingMantra(null);
             setFormData(EMPTY_FORM);
         }
+        setError(null);
         setShowForm(true);
     };
 
-    const closeForm = () => { setShowForm(false); setEditingMantra(null); };
+    const closeForm = () => {
+        setShowForm(false);
+        setEditingMantra(null);
+        setError(null);
+    };
 
-    const getCategoryName = (cat) => {
+    // Get category name from ID
+    const getCategoryName = useCallback((cat) => {
+        if (!cat) return 'Unknown';
         if (cat?.name) return cat.name;
         const found = categoriesList.find(c => c._id === cat);
         return found ? found.name : 'Unknown';
-    };
+    }, [categoriesList]);
 
-    const filteredMantras = (mantras || []).filter(m => {
-        const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCategory = !selectedCategory || m.category?._id === selectedCategory || m.category === selectedCategory;
-        return matchSearch && matchCategory;
-    });
+    // Filter mantras
+    const filteredMantras = useMemo(() => {
+        return (mantras || []).filter(m => {
+            const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                               m.sanskrit?.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchCategory = !selectedCategory || 
+                                 m.category?._id === selectedCategory || 
+                                 m.category === selectedCategory;
+            return matchSearch && matchCategory;
+        });
+    }, [mantras, searchTerm, selectedCategory]);
 
+    // Field renderer
     const field = (label, key, type = 'text', required = false, rows = null, placeholder = '') => (
         <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
@@ -251,7 +358,7 @@ const ManageMantras = () => {
             </label>
             {rows ? (
                 <textarea
-                    value={formData[key]}
+                    value={formData[key] || ''}
                     onChange={e => setFormData({ ...formData, [key]: e.target.value })}
                     rows={rows}
                     placeholder={placeholder}
@@ -261,8 +368,8 @@ const ManageMantras = () => {
             ) : (
                 <input
                     type={type}
-                    value={formData[key]}
-                    onChange={e => setFormData({ ...formData, [key]: type === 'number' ? parseInt(e.target.value) : e.target.value })}
+                    value={formData[key] || ''}
+                    onChange={e => setFormData({ ...formData, [key]: type === 'number' ? parseInt(e.target.value) || 0 : e.target.value })}
                     placeholder={placeholder}
                     className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
                     required={required}
@@ -271,20 +378,20 @@ const ManageMantras = () => {
         </div>
     );
 
-    if (loading && mantras.length === 0) return <Loader />;
+    // Loading state
+    if (loading && mantras.length === 0) {
+        return <Loader />;
+    }
 
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: { opacity: 1, transition: { staggerChildren: 0.05, delayChildren: 0.1 } }
-    };
-    const cardVariants = {
-        hidden: { opacity: 0, y: 20 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
-    };
+    // Error state with retry
+    if (fetchError) {
+        return <ErrorDisplay message={fetchError} onRetry={fetchData} />;
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 p-6 md:p-8">
             <div className="max-w-7xl mx-auto">
+                {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
                     <div>
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100/50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium mb-3">
@@ -293,24 +400,26 @@ const ManageMantras = () => {
                         </div>
                         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Mantras</h1>
                         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                            {mantras.length} {mantras.length === 1 ? 'mantra' : 'mantras'} total
+                            {filteredMantras.length} of {mantras.length} {mantras.length === 1 ? 'mantra' : 'mantras'} displayed
                         </p>
                     </div>
                     <button
                         onClick={() => openForm()}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 disabled:opacity-50"
+                        disabled={loading}
                     >
                         <Plus className="h-5 w-5" />
                         Add Mantra
                     </button>
                 </div>
 
+                {/* Search and Filter */}
                 <div className="flex flex-col sm:flex-row gap-4 mb-8">
                     <div className="relative flex-1">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-400" />
                         <input
                             type="text"
-                            placeholder="Search mantras..."
+                            placeholder="Search by name or Sanskrit text..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-amber-200/50 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition shadow-sm"
@@ -322,10 +431,21 @@ const ManageMantras = () => {
                         className="px-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-amber-200/50 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition shadow-sm sm:w-64"
                     >
                         <option value="">All Categories</option>
-                        {categoriesList.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                        {categoriesList.map(c => (
+                            <option key={c._id} value={c._id}>{c.name}</option>
+                        ))}
                     </select>
+                    {(searchTerm || selectedCategory) && (
+                        <button
+                            onClick={() => { setSearchTerm(''); setSelectedCategory(''); }}
+                            className="px-4 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    )}
                 </div>
 
+                {/* Mantra Grid */}
                 {filteredMantras.length === 0 ? (
                     <div className="text-center py-20 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-amber-200/40">
                         <div className="text-6xl mb-4">🔱</div>
@@ -334,120 +454,107 @@ const ManageMantras = () => {
                         </p>
                     </div>
                 ) : (
-                    <motion.div
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="visible"
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                    >
-                        {filteredMantras.map((m, idx) => {
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredMantras.map((m) => {
                             const categoryName = getCategoryName(m.category);
                             const cat = categoriesList.find(c => c._id === (m.category?._id || m.category));
                             const catImage = cat?.image ? getImageUrl(cat.image) : null;
                             const gradientBg = getCategoryColor(categoryName);
                             const borderColor = getBorderColor(categoryName);
-                            const fallbackIcon = catImage ? null : (categoryName ? categoryName.charAt(0).toUpperCase() : '?');
 
                             return (
-                                <motion.div key={m._id} variants={cardVariants} whileHover={{ y: -6, transition: { type: 'spring', stiffness: 200 } }}>
-                                    <div className={`group bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 border ${borderColor} hover:border-amber-400/60`}>
-                                        {/* Pastel color accent bar */}
-                                        <div className={`h-1.5 w-full bg-gradient-to-r ${gradientBg}`} />
-
-                                        <div className="p-5">
-                                            <div className="flex items-start gap-3">
-                                                {/* Category Image / Avatar */}
-                                                <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40 flex items-center justify-center shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-white/50">
-                                                    {catImage ? (
-                                                        <img
-                                                            src={catImage}
-                                                            alt={categoryName}
-                                                            className="w-full h-full object-cover"
-                                                            onError={(e) => {
-                                                                e.target.style.display = 'none';
-                                                                const parent = e.target.parentElement;
-                                                                parent.innerHTML = `<span class="text-xl font-bold text-amber-700">${fallbackIcon}</span>`;
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        <span className="text-xl font-bold text-amber-700">{fallbackIcon}</span>
+                                <motion.div
+                                    key={m._id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    whileHover={{ y: -4 }}
+                                    className="group bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 border hover:border-amber-400/60"
+                                >
+                                    <div className={`h-1.5 w-full bg-gradient-to-r ${gradientBg}`} />
+                                    
+                                    <div className="p-5">
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40 flex items-center justify-center shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-white/50">
+                                                {catImage ? (
+                                                    <img
+                                                        src={catImage}
+                                                        alt={categoryName}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                            const parent = e.target.parentElement;
+                                                            parent.innerHTML = `<span class="text-xl font-bold text-amber-700">${categoryName.charAt(0).toUpperCase()}</span>`;
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <span className="text-xl font-bold text-amber-700">{categoryName.charAt(0).toUpperCase()}</span>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-amber-600 transition-colors line-clamp-1">
+                                                    {m.name}
+                                                </h3>
+                                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                    <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full">
+                                                        {categoryName}
+                                                    </span>
+                                                    {m.isFeatured && (
+                                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                                            <Star className="h-3 w-3" /> Featured
+                                                        </span>
                                                     )}
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-amber-600 transition-colors line-clamp-1">
-                                                        {m.name}
-                                                    </h3>
-                                                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                                                        <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full">
-                                                            {categoryName}
-                                                        </span>
-                                                        {m.isFeatured && (
-                                                            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
-                                                                <Star className="h-3 w-3" /> Featured
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-1.5 flex-shrink-0">
-                                                    <button
-                                                        onClick={() => openForm(m)}
-                                                        className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition-colors"
-                                                        title="Edit"
-                                                    >
-                                                        <Edit className="h-3.5 w-3.5 text-blue-600" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(m._id)}
-                                                        className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                                    </button>
-                                                </div>
                                             </div>
-
-                                            {/* Sanskrit preview */}
-                                            {m.sanskrit && (
-                                                <div className="mt-3 font-devanagari text-sm text-gray-600 dark:text-gray-300 line-clamp-2 bg-amber-50/40 dark:bg-amber-900/10 rounded-xl px-3 py-2 leading-relaxed">
-                                                    {m.sanskrit.slice(0, 120)}
-                                                    {m.sanskrit.length > 120 && '...'}
-                                                </div>
-                                            )}
-
-                                            {/* Benefits preview */}
-                                            {m.benefits && (
-                                                <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm line-clamp-2 leading-relaxed">
-                                                    {m.benefits.slice(0, 100)}
-                                                </p>
-                                            )}
-
-                                            {/* Metadata row */}
-                                            <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
-                                                <span className="flex items-center gap-1">
-                                                    <Clock className="h-3.5 w-3.5" /> {m.bestTime || 'Any time'}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <TrendingUp className="h-3.5 w-3.5" /> {m.recommendedCount || 108}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    👁 {(m.views || 0).toLocaleString()}
-                                                </span>
+                                            <div className="flex gap-1.5 flex-shrink-0">
+                                                <button
+                                                    onClick={() => openForm(m)}
+                                                    className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition-colors"
+                                                    title="Edit"
+                                                >
+                                                    <Edit className="h-3.5 w-3.5 text-blue-600" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(m._id, m.name)}
+                                                    className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition-colors"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                                </button>
                                             </div>
+                                        </div>
 
-                                            {/* Explore action */}
-                                            <div className="mt-3 flex justify-end">
-                                                <span className="text-amber-600 text-xs font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
-                                                    View <ArrowRight className="h-3.5 w-3.5" />
-                                                </span>
+                                        {m.sanskrit && (
+                                            <div className="mt-3 font-devanagari text-sm text-gray-600 dark:text-gray-300 line-clamp-2 bg-amber-50/40 dark:bg-amber-900/10 rounded-xl px-3 py-2 leading-relaxed">
+                                                {m.sanskrit}
                                             </div>
+                                        )}
+
+                                        {m.benefits && (
+                                            <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm line-clamp-2 leading-relaxed">
+                                                {m.benefits}
+                                            </p>
+                                        )}
+
+                                        <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
+                                            <span className="flex items-center gap-1">
+                                                <Clock className="h-3.5 w-3.5" /> {m.bestTime || 'Any time'}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                <TrendingUp className="h-3.5 w-3.5" /> {m.recommendedCount || 108}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                👁 {(m.views || 0).toLocaleString()}
+                                            </span>
                                         </div>
                                     </div>
                                 </motion.div>
                             );
                         })}
-                    </motion.div>
+                    </div>
                 )}
 
+                {/* Form Modal */}
                 <AnimatePresence>
                     {showForm && (
                         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeForm}>
@@ -471,7 +578,13 @@ const ManageMantras = () => {
                                 </div>
 
                                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                                    {/* ─── Form fields (unchanged) ─── */}
+                                    {error && (
+                                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
+                                            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                                            <span>{error}</span>
+                                        </div>
+                                    )}
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {field('Mantra Name', 'name', 'text', true, null, 'e.g., Gayatri Mantra')}
                                         <div>
@@ -488,7 +601,7 @@ const ManageMantras = () => {
                                                 {categoriesList.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                                             </select>
                                             {categoriesList.length === 0 && (
-                                                <p className="text-red-500 text-xs mt-1">No categories found. Create one first.</p>
+                                                <p className="text-red-500 text-xs mt-1">⚠️ No categories found. Please create a category first.</p>
                                             )}
                                         </div>
                                     </div>
@@ -570,10 +683,10 @@ const ManageMantras = () => {
                                         </button>
                                         <button
                                             type="submit"
-                                            disabled={loading}
+                                            disabled={isSubmitting || categoriesList.length === 0}
                                             className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
                                         >
-                                            {loading ? 'Saving...' : (editingMantra ? 'Update Mantra' : 'Create Mantra')}
+                                            {isSubmitting ? 'Saving...' : (editingMantra ? 'Update Mantra' : 'Create Mantra')}
                                         </button>
                                     </div>
                                 </form>
