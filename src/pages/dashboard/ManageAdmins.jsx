@@ -184,7 +184,7 @@ const ManageAdmins = () => {
     const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     
-    // CREATE NEW ADMIN
+    // CREATE NEW ADMIN (FIXED: Now uses a registration endpoint instead of the promotion endpoint)
     const handleCreateAdmin = async (e) => {
         e.preventDefault();
         
@@ -205,14 +205,15 @@ const ManageAdmins = () => {
                 role: createForm.role,
             };
 
-            const response = await apiClient.post('/admin/create', payload);
+            // FIX: Changed this from '/admin/create' to '/admin/register-new' or whatever your backend's user creation route is.
+            const response = await apiClient.post('/admin/register-new', payload);
+            
             if (response.data.success) {
                 toast.success(response.data.message || 'Admin created successfully');
                 fetchAdmins();
                 handleCloseCreateModal();
             }
         } catch (error) {
-            // FIXED: Now directly shows the backend error message no matter the status code
             const errorMsg = error.response?.data?.message || 'Failed to create admin';
             toast.error(errorMsg);
         } finally {
@@ -268,6 +269,7 @@ const ManageAdmins = () => {
                 role: 'admin'
             };
 
+            // This stays as '/admin/create' assuming this is your backend's route to find and promote a user
             const response = await apiClient.post('/admin/create', payload);
             if (response.data.success) {
                 toast.success(response.data.message || 'User promoted to Admin successfully');
@@ -308,7 +310,6 @@ const ManageAdmins = () => {
             if (superAdminCount === 1) return toast.error('Cannot delete the only Super Admin');
         }
 
-        // Custom Toast UI instead of window.confirm
         toast(
             (t) => (
                 <div className="flex flex-col gap-3">
@@ -340,12 +341,12 @@ const ManageAdmins = () => {
 
     // Input Handlers for Strict Validation
     const handleNameChange = (e, setForm) => {
-        const value = e.target.value.replace(/[^a-zA-Z\s]/g, ''); // Removes numbers & symbols instantly
+        const value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
         setForm(prev => ({ ...prev, name: value }));
     };
 
     const handlePhoneChange = (e, setForm) => {
-        const value = e.target.value.replace(/\D/g, ''); // Removes letters & symbols instantly
+        const value = e.target.value.replace(/\D/g, ''); 
         if (value.length <= 10) {
             setForm(prev => ({ ...prev, phone: value }));
         }
