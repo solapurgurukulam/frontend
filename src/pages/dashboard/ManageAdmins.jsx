@@ -63,6 +63,7 @@ const ManageAdmins = () => {
     const [isAddExistingModalOpen, setIsAddExistingModalOpen] = useState(false);
     const [editingAdmin, setEditingAdmin] = useState(null);
     const [currentUserRole, setCurrentUserRole] = useState(null);
+    const [currentUserId, setCurrentUserId] = useState(null);
     
     // Form states
     const [createForm, setCreateForm] = useState({
@@ -91,20 +92,11 @@ const ManageAdmins = () => {
 
     useEffect(() => { 
         fetchAdmins();
-        // Get current user role from localStorage
+        // Get current user info from localStorage
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         setCurrentUserRole(user.role);
+        setCurrentUserId(user.id);
     }, []);
-
-    // Auto-search when Add Existing modal opens with pre-filled data
-    useEffect(() => {
-        if (isAddExistingModalOpen && (addExistingForm.email || addExistingForm.phone)) {
-            const timer = setTimeout(() => {
-                handleSearchUser();
-            }, 500);
-            return () => clearTimeout(timer);
-        }
-    }, [isAddExistingModalOpen, addExistingForm.email, addExistingForm.phone]);
 
     const fetchAdmins = async () => {
         setLoading(true);
@@ -123,6 +115,9 @@ const ManageAdmins = () => {
 
     // Check if current user is Super Admin
     const isSuperAdmin = () => currentUserRole === 'super_admin';
+
+    // Check if current user is the given admin
+    const isCurrentUser = (adminId) => currentUserId === adminId;
 
     // Open Create New Admin Modal
     const handleOpenCreateModal = () => {
@@ -175,7 +170,7 @@ const ManageAdmins = () => {
         setFoundUser(null);
     };
 
-    // Search User by Email or Phone
+    // Search User by Email or Phone - ONLY on button click
     const handleSearchUser = async () => {
         if (!addExistingForm.email && !addExistingForm.phone) {
             return toast.error('Please enter email or phone to search');
@@ -224,7 +219,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // CREATE NEW ADMIN - UPDATED with better error handling
+    // CREATE NEW ADMIN
     const handleCreateAdmin = async (e) => {
         e.preventDefault();
         
@@ -254,13 +249,12 @@ const ManageAdmins = () => {
             const errorMsg = error.response?.data?.message || 'Failed to create admin';
             const statusCode = error.response?.status;
             
-            // Check if user already exists (400 or duplicate error)
+            // Check if user already exists
             if (statusCode === 400 || 
                 errorMsg.toLowerCase().includes('already exists') || 
                 errorMsg.toLowerCase().includes('duplicate') ||
                 errorMsg.toLowerCase().includes('existing')) {
                 
-                // Show toast with option to switch to Add Existing
                 toast.error(
                     (t) => (
                         <div className="max-w-xs">
@@ -271,7 +265,6 @@ const ManageAdmins = () => {
                                     onClick={() => {
                                         toast.dismiss(t.id);
                                         handleCloseCreateModal();
-                                        // Open Add Existing modal with pre-filled email
                                         setTimeout(() => {
                                             handleOpenAddExistingModal(createForm.email);
                                         }, 100);
@@ -374,10 +367,15 @@ const ManageAdmins = () => {
         }
     };
 
-    // DELETE ADMIN - Super Admin only
+    // DELETE ADMIN - Super Admin cannot delete themselves
     const handleDeleteAdmin = async (admin) => {
         if (!isSuperAdmin()) {
             return toast.error('Only Super Admin can delete admins');
+        }
+        
+        // ✅ PREVENT SUPER ADMIN FROM DELETING THEMSELVES
+        if (isCurrentUser(admin._id)) {
+            return toast.error('You cannot delete your own account');
         }
         
         if (admin.role === 'super_admin') {
@@ -403,10 +401,15 @@ const ManageAdmins = () => {
         }
     };
 
-    // BLOCK ADMIN - Super Admin only
+    // BLOCK ADMIN - Super Admin cannot block themselves
     const handleBlockAdmin = async (admin) => {
         if (!isSuperAdmin()) {
             return toast.error('Only Super Admin can block admins');
+        }
+        
+        // ✅ PREVENT SUPER ADMIN FROM BLOCKING THEMSELVES
+        if (isCurrentUser(admin._id)) {
+            return toast.error('You cannot block your own account');
         }
         
         if (admin.role === 'super_admin') {
@@ -429,7 +432,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // UNBLOCK ADMIN - Super Admin only
+    // UNBLOCK ADMIN
     const handleUnblockAdmin = async (admin) => {
         if (!isSuperAdmin()) {
             return toast.error('Only Super Admin can unblock admins');
@@ -457,10 +460,15 @@ const ManageAdmins = () => {
         }
     };
 
-    // REMOVE ADMIN (Demote to user) - Super Admin only
+    // REMOVE ADMIN (Demote to user) - Super Admin cannot remove themselves
     const handleRemoveAdmin = async (admin) => {
         if (!isSuperAdmin()) {
             return toast.error('Only Super Admin can remove admins');
+        }
+        
+        // ✅ PREVENT SUPER ADMIN FROM REMOVING THEMSELVES
+        if (isCurrentUser(admin._id)) {
+            return toast.error('You cannot remove your own admin privileges');
         }
         
         if (admin.role === 'super_admin') {
@@ -527,7 +535,7 @@ const ManageAdmins = () => {
                     )}
                 </div>
 
-                {/* Admin Cards Grid */}
+                {/* Admin Cards Grid - Shows ALL admins including blocked ones */}
                 {admins.length === 0 ? (
                     <div className="text-center py-16 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-amber-200/40">
                         <Users className="h-12 w-12 text-amber-400 mx-auto mb-3" />
@@ -538,6 +546,7 @@ const ManageAdmins = () => {
                         {admins.map((admin, idx) => {
                             const isSuperAdminUser = admin.role === 'super_admin';
                             const isBlocked = admin.isBlocked;
+                            const isSelf = isCurrentUser(admin._id);
 
                             return (
                                 <motion.div
@@ -558,6 +567,14 @@ const ManageAdmins = () => {
                                             <div className="absolute top-4 right-4">
                                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
                                                     <Ban className="h-3 w-3" /> Blocked
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {isSelf && (
+                                            <div className="absolute top-4 left-4">
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+                                                    <User className="h-3 w-3" /> You
                                                 </span>
                                             </div>
                                         )}
@@ -614,6 +631,7 @@ const ManageAdmins = () => {
                                             {/* Action Buttons - Only Super Admin can perform actions */}
                                             {isSuperAdmin() && (
                                                 <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                                    {/* Edit button - always visible except for self? No, self can be edited too */}
                                                     {!isBlocked && !isSuperAdminUser && (
                                                         <>
                                                             <button
@@ -654,6 +672,26 @@ const ManageAdmins = () => {
                                                             >
                                                                 <Edit className="h-4 w-4" /> Edit
                                                             </button>
+                                                            {/* ✅ DELETE BUTTON - Hidden for self (current user) */}
+                                                            {!isSelf && (
+                                                                <button
+                                                                    onClick={() => handleDeleteAdmin(admin)}
+                                                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" /> Delete
+                                                                </button>
+                                                            )}
+                                                            {/* Show message if it's self */}
+                                                            {isSelf && (
+                                                                <div className="w-full text-center text-xs text-gray-400 py-1">
+                                                                    Cannot delete your own account
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+
+                                                    {!isSuperAdminUser && !isBlocked && (
+                                                        <>
                                                             <button
                                                                 onClick={() => handleDeleteAdmin(admin)}
                                                                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
@@ -661,15 +699,6 @@ const ManageAdmins = () => {
                                                                 <Trash2 className="h-4 w-4" /> Delete
                                                             </button>
                                                         </>
-                                                    )}
-
-                                                    {!isSuperAdminUser && !isBlocked && (
-                                                        <button
-                                                            onClick={() => handleDeleteAdmin(admin)}
-                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" /> Delete
-                                                        </button>
                                                     )}
                                                 </div>
                                             )}
@@ -908,7 +937,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin */}
+                {/* MODAL 3: Add Existing User as Admin - NO AUTO-SEARCH */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1060,7 +1089,6 @@ const ManageAdmins = () => {
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        {/* Show if user is already admin */}
                                                         {(foundUser.role === 'admin' || foundUser.role === 'super_admin') && (
                                                             <span className="block px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full mb-1">
                                                                 Already {foundUser.role}
