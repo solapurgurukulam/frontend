@@ -568,7 +568,7 @@ const ManageAdmins = () => {
                                             value={createForm.name}
                                             onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            placeholder="John Doe"
+                                            placeholder=""
                                             required
                                         />
                                     </div>
@@ -582,7 +582,7 @@ const ManageAdmins = () => {
                                             value={createForm.email}
                                             onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            placeholder="admin@example.com"
+                                            placeholder=""
                                             required
                                         />
                                     </div>
@@ -596,7 +596,7 @@ const ManageAdmins = () => {
                                             value={createForm.phone}
                                             onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            placeholder="+91 1234567890"
+                                            placeholder=""
                                         />
                                     </div>
 
@@ -609,7 +609,7 @@ const ManageAdmins = () => {
                                             value={createForm.password}
                                             onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            placeholder="Minimum 6 characters"
+                                            placeholder=""
                                             minLength={6}
                                             required
                                         />
@@ -679,7 +679,7 @@ const ManageAdmins = () => {
                                             value={editForm.name}
                                             onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            placeholder="John Doe"
+                                            placeholder=""
                                             required
                                         />
                                     </div>
@@ -706,7 +706,7 @@ const ManageAdmins = () => {
                                             value={editForm.phone}
                                             onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
                                             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            placeholder="+91 1234567890"
+                                            placeholder=""
                                         />
                                     </div>
 
@@ -748,7 +748,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin - FIXED: No [object Object] placeholder */}
+                {/* MODAL 3: Add Existing User as Admin - EMPTY PLACEHOLDER */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -818,7 +818,7 @@ const ManageAdmins = () => {
                                             </div>
                                         </div>
 
-                                        {/* Email Input - FIXED: No [object Object] */}
+                                        {/* Email Input - EMPTY PLACEHOLDER */}
                                         {searchMethod === 'email' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -834,7 +834,7 @@ const ManageAdmins = () => {
                                                             phone: '' 
                                                         })}
                                                         className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
-                                                        placeholder="Enter user email"
+                                                        placeholder=""
                                                         required={searchMethod === 'email'}
                                                     />
                                                     <button
@@ -862,7 +862,7 @@ const ManageAdmins = () => {
                                                             email: '' 
                                                         })}
                                                         className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
-                                                        placeholder="Enter phone number"
+                                                        placeholder=""
                                                         required={searchMethod === 'phone'}
                                                     />
                                                     <button
