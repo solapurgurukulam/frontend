@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Plus, Edit, Trash2, Shield, User, Mail, Phone, Ban, 
     CheckCircle, X, Users, Award, UserPlus, UserCheck, 
-    Info, AlertCircle 
+    Info, AlertCircle, Search, UserX 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -84,6 +84,8 @@ const ManageAdmins = () => {
     });
     
     const [searchMethod, setSearchMethod] = useState('email');
+    const [foundUser, setFoundUser] = useState(null);
+    const [searching, setSearching] = useState(false);
 
     useEffect(() => { fetchAdmins(); }, []);
 
@@ -134,15 +136,17 @@ const ManageAdmins = () => {
     const handleOpenAddExistingModal = () => {
         setAddExistingForm({ email: '', phone: '' });
         setSearchMethod('email');
+        setFoundUser(null);
         setIsAddExistingModalOpen(true);
     };
 
     const handleCloseAddExistingModal = () => {
         setIsAddExistingModalOpen(false);
         setAddExistingForm({ email: '', phone: '' });
+        setFoundUser(null);
     };
 
-    // CREATE NEW ADMIN (Super Admin only)
+    // CREATE NEW ADMIN
     const handleCreateAdmin = async (e) => {
         e.preventDefault();
         
@@ -175,7 +179,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // UPDATE ADMIN (Super Admin only)
+    // UPDATE ADMIN
     const handleUpdateAdmin = async (e) => {
         e.preventDefault();
         
@@ -202,7 +206,34 @@ const ManageAdmins = () => {
         }
     };
 
-    // BLOCK ADMIN (Super Admin only)
+    // ADD EXISTING USER AS ADMIN
+    const handleAddExistingAdmin = async (e) => {
+        e.preventDefault();
+        
+        if (!addExistingForm.email && !addExistingForm.phone) {
+            return toast.error('Please provide email or phone to find the user');
+        }
+
+        setLoading(true);
+        try {
+            const payload = {};
+            if (addExistingForm.email) payload.email = addExistingForm.email.trim();
+            if (addExistingForm.phone) payload.phone = addExistingForm.phone.trim();
+
+            const response = await apiClient.post('/admin/add', payload);
+            if (response.data.success) {
+                toast.success(response.data.message || 'User promoted to Admin successfully');
+                fetchAdmins();
+                handleCloseAddExistingModal();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to add admin');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // BLOCK ADMIN
     const handleBlockAdmin = async (admin) => {
         if (admin.role === 'super_admin') {
             return toast.error('Cannot block a Super Admin');
@@ -224,25 +255,56 @@ const ManageAdmins = () => {
         }
     };
 
-    // UNBLOCK ADMIN (Super Admin only)
+    // UNBLOCK ADMIN
     const handleUnblockAdmin = async (admin) => {
+        const shouldRestore = window.confirm(
+            `Do you want to restore ${admin.name} as Admin? Click OK to restore, Cancel to keep as regular user.`
+        );
+        
         if (!window.confirm(`Are you sure you want to unblock ${admin.name}?`)) return;
 
         setLoading(true);
         try {
-            const response = await apiClient.post(`/admin/${admin._id}/unblock`);
+            const response = await apiClient.post(`/admin/${admin._id}/unblock`, { 
+                restoreAsAdmin: shouldRestore 
+            });
             if (response.data.success) {
-                toast.success(response.data.message || 'Admin unblocked successfully');
+                toast.success(response.data.message || 'User unblocked successfully');
                 fetchAdmins();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to unblock admin');
+            toast.error(error.response?.data?.message || 'Failed to unblock user');
         } finally {
             setLoading(false);
         }
     };
 
-    // DELETE ADMIN (Super Admin only)
+    // REMOVE ADMIN (Demote to user)
+    const handleRemoveAdmin = async (admin) => {
+        if (admin.role === 'super_admin') {
+            const superAdminCount = admins.filter(a => a.role === 'super_admin').length;
+            if (superAdminCount === 1) {
+                return toast.error('Cannot remove the only Super Admin');
+            }
+        }
+        
+        if (!window.confirm(`Are you sure you want to remove admin privileges from ${admin.name}?`)) return;
+
+        setLoading(true);
+        try {
+            const response = await apiClient.post(`/admin/${admin._id}/remove`);
+            if (response.data.success) {
+                toast.success(response.data.message || 'Admin privileges removed successfully');
+                fetchAdmins();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to remove admin');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // DELETE ADMIN
     const handleDeleteAdmin = async (admin) => {
         if (admin.role === 'super_admin') {
             const superAdminCount = admins.filter(a => a.role === 'super_admin').length;
@@ -376,17 +438,17 @@ const ManageAdmins = () => {
                                                         <span>{admin.phone}</span>
                                                     </div>
                                                 )}
-                                                <div className="flex items-center gap-2 text-xs">
+                                                <div className="flex items-center gap-2 text-xs mt-1">
                                                     <span className={`px-2 py-0.5 rounded-full ${
                                                         admin.isVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                                                     }`}>
-                                                        {admin.isVerified ? '✓ Verified' : '⚠ Unverified'}
+                                                        {admin.isVerified ? '✓ Verified' : '⚠ Not Verified'}
                                                     </span>
                                                 </div>
                                             </div>
 
                                             <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                                {!isBlocked && (
+                                                {!isBlocked && !isSuperAdmin && (
                                                     <>
                                                         <button
                                                             onClick={() => handleOpenEditModal(admin)}
@@ -394,33 +456,54 @@ const ManageAdmins = () => {
                                                         >
                                                             <Edit className="h-4 w-4" /> Edit
                                                         </button>
+                                                        <button
+                                                            onClick={() => handleRemoveAdmin(admin)}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-xl hover:bg-yellow-200 transition-colors text-sm font-medium"
+                                                        >
+                                                            <UserX className="h-4 w-4" /> Remove
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleBlockAdmin(admin)}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                        >
+                                                            <Ban className="h-4 w-4" /> Block
+                                                        </button>
                                                     </>
                                                 )}
                                                 
-                                                {isBlocked ? (
+                                                {isBlocked && (
                                                     <button
                                                         onClick={() => handleUnblockAdmin(admin)}
                                                         className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors text-sm font-medium"
                                                     >
                                                         <CheckCircle className="h-4 w-4" /> Unblock
                                                     </button>
-                                                ) : (
-                                                    !isSuperAdmin && (
-                                                        <>
-                                                            <button
-                                                                onClick={() => handleBlockAdmin(admin)}
-                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                            >
-                                                                <Ban className="h-4 w-4" /> Block
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteAdmin(admin)}
-                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" /> Delete
-                                                            </button>
-                                                        </>
-                                                    )
+                                                )}
+
+                                                {isSuperAdmin && (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleOpenEditModal(admin)}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                                                        >
+                                                            <Edit className="h-4 w-4" /> Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteAdmin(admin)}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" /> Delete
+                                                        </button>
+                                                    </>
+                                                )}
+
+                                                {!isSuperAdmin && !isBlocked && (
+                                                    <button
+                                                        onClick={() => handleDeleteAdmin(admin)}
+                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" /> Delete
+                                                    </button>
                                                 )}
                                             </div>
                                         </div>
@@ -648,7 +731,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin */}
+                {/* MODAL 3: Add Existing User as Admin - UPDATED */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -656,7 +739,7 @@ const ManageAdmins = () => {
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-green-200/50"
+                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-green-200/50 max-h-[90vh] overflow-y-auto"
                             >
                                 <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -676,32 +759,42 @@ const ManageAdmins = () => {
                                         </p>
                                     </div>
 
-                                    <form onSubmit={handleCreateAdmin} className="space-y-4">
+                                    <form onSubmit={handleAddExistingAdmin} className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 Search by
                                             </label>
                                             <div className="flex gap-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => setSearchMethod('email')}
+                                                    onClick={() => {
+                                                        setSearchMethod('email');
+                                                        setAddExistingForm({ email: '', phone: '' });
+                                                        setFoundUser(null);
+                                                    }}
                                                     className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition ${
                                                         searchMethod === 'email'
                                                             ? 'bg-green-500 text-white'
                                                             : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
                                                     }`}
                                                 >
+                                                    <Mail className="h-4 w-4 inline mr-1" />
                                                     Email
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setSearchMethod('phone')}
+                                                    onClick={() => {
+                                                        setSearchMethod('phone');
+                                                        setAddExistingForm({ email: '', phone: '' });
+                                                        setFoundUser(null);
+                                                    }}
                                                     className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition ${
                                                         searchMethod === 'phone'
                                                             ? 'bg-green-500 text-white'
                                                             : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200'
                                                     }`}
                                                 >
+                                                    <Phone className="h-4 w-4 inline mr-1" />
                                                     Phone
                                                 </button>
                                             </div>
@@ -715,7 +808,11 @@ const ManageAdmins = () => {
                                                 <input
                                                     type="email"
                                                     value={addExistingForm.email}
-                                                    onChange={(e) => setAddExistingForm({ ...addExistingForm, email: e.target.value, phone: '' })}
+                                                    onChange={(e) => setAddExistingForm({ 
+                                                        ...addExistingForm, 
+                                                        email: e.target.value, 
+                                                        phone: '' 
+                                                    })}
                                                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                                     placeholder="user@example.com"
                                                     required={searchMethod === 'email'}
@@ -729,7 +826,11 @@ const ManageAdmins = () => {
                                                 <input
                                                     type="tel"
                                                     value={addExistingForm.phone}
-                                                    onChange={(e) => setAddExistingForm({ ...addExistingForm, phone: e.target.value, email: '' })}
+                                                    onChange={(e) => setAddExistingForm({ 
+                                                        ...addExistingForm, 
+                                                        phone: e.target.value, 
+                                                        email: '' 
+                                                    })}
                                                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                                     placeholder="+91 1234567890"
                                                     required={searchMethod === 'phone'}
@@ -737,10 +838,13 @@ const ManageAdmins = () => {
                                             </div>
                                         )}
 
-                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-xl">
-                                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                                                <AlertCircle className="h-4 w-4 inline mr-1" />
-                                                User must already be registered and verified
+                                        {/* Verification Status Warning */}
+                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-xl border border-yellow-200 dark:border-yellow-800">
+                                            <p className="text-sm text-yellow-700 dark:text-yellow-300 flex items-start gap-2">
+                                                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                                                <span>
+                                                    <strong>Important:</strong> User must already be <strong>registered</strong> and <strong>verified</strong> (email & phone) before they can be promoted to Admin.
+                                                </span>
                                             </p>
                                         </div>
 
