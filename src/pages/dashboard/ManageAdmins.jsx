@@ -818,7 +818,7 @@ const ManageAdmins = () => {
                                             </div>
                                         </div>
 
-                                        {/* Email Input - FIXED: Removed [object Object] placeholder */}
+                                        {/* Email Input - FIXED: No [object Object] */}
                                         {searchMethod === 'email' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -913,7 +913,6 @@ const ManageAdmins = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* Show message if already admin */}
                                                 {(foundUser.role === 'admin' || foundUser.role === 'super_admin') && (
                                                     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                                                         <p className="text-sm text-purple-600 dark:text-purple-400 text-center">
@@ -922,7 +921,6 @@ const ManageAdmins = () => {
                                                     </div>
                                                 )}
 
-                                                {/* Show blocked message */}
                                                 {foundUser.isBlocked && (
                                                     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                                                         <p className="text-sm text-red-600 dark:text-red-400 text-center">
@@ -933,7 +931,7 @@ const ManageAdmins = () => {
                                             </div>
                                         )}
 
-                                        {/* Note - Removed verification requirement */}
+                                        {/* Note */}
                                         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
                                             <p className="text-sm text-blue-700 dark:text-blue-300 flex items-start gap-2">
                                                 <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
