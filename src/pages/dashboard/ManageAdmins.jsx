@@ -135,26 +135,6 @@ const ManageAdmins = () => {
         setCreateForm({ name: '', email: '', phone: '', password: '', role: 'admin' });
     };
 
-    // Open Edit Admin Modal
-    const handleOpenEditModal = (admin) => {
-        if (!isSuperAdmin()) {
-            return toast.error('Only Super Admin can edit admins');
-        }
-        setEditingAdmin(admin);
-        setEditForm({
-            name: admin.name || '',
-            phone: admin.phone || '',
-            role: admin.role || 'admin',
-        });
-        setIsEditModalOpen(true);
-    };
-
-    const handleCloseEditModal = () => {
-        setIsEditModalOpen(false);
-        setEditingAdmin(null);
-        setEditForm({ name: '', phone: '', role: 'admin' });
-    };
-
     // Open Add Existing User Modal
     const handleOpenAddExistingModal = (prefillEmail = '') => {
         if (!isSuperAdmin()) {
@@ -405,7 +385,7 @@ const ManageAdmins = () => {
                     {isSuperAdmin() && (
                         <div className="flex flex-wrap gap-3">
                             <button
-                                onClick={handleOpenAddExistingModal}
+                                onClick={() => handleOpenAddExistingModal()}
                                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
                             >
                                 <UserPlus className="h-5 w-5" />
