@@ -96,6 +96,16 @@ const ManageAdmins = () => {
         setCurrentUserRole(user.role);
     }, []);
 
+    // Auto-search when Add Existing modal opens with pre-filled data
+    useEffect(() => {
+        if (isAddExistingModalOpen && (addExistingForm.email || addExistingForm.phone)) {
+            const timer = setTimeout(() => {
+                handleSearchUser();
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [isAddExistingModalOpen, addExistingForm.email, addExistingForm.phone]);
+
     const fetchAdmins = async () => {
         setLoading(true);
         try {
@@ -149,11 +159,11 @@ const ManageAdmins = () => {
     };
 
     // Open Add Existing User Modal
-    const handleOpenAddExistingModal = () => {
+    const handleOpenAddExistingModal = (prefillEmail = '') => {
         if (!isSuperAdmin()) {
             return toast.error('Only Super Admin can add existing users as admins');
         }
-        setAddExistingForm({ email: '', phone: '' });
+        setAddExistingForm({ email: prefillEmail || '', phone: '' });
         setSearchMethod('email');
         setFoundUser(null);
         setIsAddExistingModalOpen(true);
@@ -182,7 +192,7 @@ const ManageAdmins = () => {
                 setFoundUser(response.data.data);
                 toast.success('User found successfully!');
                 
-                // ✅ Check if user is already an admin
+                // Check if user is already an admin
                 if (response.data.data.role === 'admin' || response.data.data.role === 'super_admin') {
                     toast.warning(`User is already an ${response.data.data.role}`);
                 }
@@ -214,7 +224,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // CREATE NEW ADMIN
+    // CREATE NEW ADMIN - UPDATED with better error handling
     const handleCreateAdmin = async (e) => {
         e.preventDefault();
         
@@ -241,10 +251,46 @@ const ManageAdmins = () => {
                 handleCloseCreateModal();
             }
         } catch (error) {
-            // ✅ Better error handling for duplicate user
             const errorMsg = error.response?.data?.message || 'Failed to create admin';
-            if (errorMsg.includes('already exists')) {
-                toast.error('User already exists with this email or phone. Please use "Add Existing User" instead.');
+            const statusCode = error.response?.status;
+            
+            // Check if user already exists (400 or duplicate error)
+            if (statusCode === 400 || 
+                errorMsg.toLowerCase().includes('already exists') || 
+                errorMsg.toLowerCase().includes('duplicate') ||
+                errorMsg.toLowerCase().includes('existing')) {
+                
+                // Show toast with option to switch to Add Existing
+                toast.error(
+                    (t) => (
+                        <div className="max-w-xs">
+                            <p className="font-semibold text-red-700">⚠️ User Already Exists!</p>
+                            <p className="text-sm text-gray-600 mt-1">{errorMsg}</p>
+                            <div className="flex gap-2 mt-3">
+                                <button
+                                    onClick={() => {
+                                        toast.dismiss(t.id);
+                                        handleCloseCreateModal();
+                                        // Open Add Existing modal with pre-filled email
+                                        setTimeout(() => {
+                                            handleOpenAddExistingModal(createForm.email);
+                                        }, 100);
+                                    }}
+                                    className="px-3 py-1.5 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition"
+                                >
+                                    Add as Existing User
+                                </button>
+                                <button
+                                    onClick={() => toast.dismiss(t.id)}
+                                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    ),
+                    { duration: 10000 }
+                );
             } else {
                 toast.error(errorMsg);
             }
@@ -296,7 +342,7 @@ const ManageAdmins = () => {
             return toast.error('Please search and find the user first');
         }
 
-        // ✅ Check if user is already an admin
+        // Check if user is already an admin
         if (foundUser.role === 'admin' || foundUser.role === 'super_admin') {
             return toast.error(`User is already an ${foundUser.role}`);
         }
@@ -492,7 +538,6 @@ const ManageAdmins = () => {
                         {admins.map((admin, idx) => {
                             const isSuperAdminUser = admin.role === 'super_admin';
                             const isBlocked = admin.isBlocked;
-                            const canEdit = isSuperAdmin();
 
                             return (
                                 <motion.div
@@ -566,7 +611,7 @@ const ManageAdmins = () => {
                                                 </div>
                                             </div>
 
-                                            {/* ✅ Action Buttons - Only Super Admin can perform actions */}
+                                            {/* Action Buttons - Only Super Admin can perform actions */}
                                             {isSuperAdmin() && (
                                                 <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
                                                     {!isBlocked && !isSuperAdminUser && (
@@ -1015,7 +1060,7 @@ const ManageAdmins = () => {
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        {/* ✅ Show if user is already admin */}
+                                                        {/* Show if user is already admin */}
                                                         {(foundUser.role === 'admin' || foundUser.role === 'super_admin') && (
                                                             <span className="block px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full mb-1">
                                                                 Already {foundUser.role}
@@ -1060,7 +1105,7 @@ const ManageAdmins = () => {
                                                     </div>
                                                 )}
 
-                                                {/* ✅ Show message if already admin */}
+                                                {/* Show message if already admin */}
                                                 {(foundUser.role === 'admin' || foundUser.role === 'super_admin') && (
                                                     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                                                         <p className="text-sm text-purple-600 dark:text-purple-400 text-center">
