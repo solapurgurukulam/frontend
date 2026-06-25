@@ -87,19 +87,6 @@ const getCategoryColor = (categoryName) => {
     return 'from-amber-100 to-orange-200';
 };
 
-const getBorderColor = (categoryName) => {
-    if (!categoryName) return 'border-amber-200';
-    const name = categoryName.toLowerCase();
-    if (name.includes('shiva') || name.includes('mahadev')) return 'border-indigo-300';
-    if (name.includes('ganesh')) return 'border-red-300';
-    if (name.includes('durga')) return 'border-pink-300';
-    if (name.includes('vishnu')) return 'border-teal-300';
-    if (name.includes('lakshmi')) return 'border-yellow-300';
-    if (name.includes('saraswati')) return 'border-blue-300';
-    if (name.includes('hanuman')) return 'border-orange-300';
-    return 'border-amber-300';
-};
-
 const EMPTY_FORM = {
     name: '',
     sanskrit: '',
@@ -179,14 +166,6 @@ const ManageMantras = () => {
         if (!formData.howToChant?.trim()) errors.howToChant = 'How to chant is required';
         if (!formData.bestTime?.trim()) errors.bestTime = 'Best time is required';
         
-        // Validate numeric fields
-        if (formData.order && isNaN(parseInt(formData.order))) {
-            errors.order = 'Display order must be a number';
-        }
-        if (formData.recommendedCount && isNaN(parseInt(formData.recommendedCount))) {
-            errors.recommendedCount = 'Recommended count must be a number';
-        }
-        
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
     };
@@ -229,7 +208,8 @@ const ManageMantras = () => {
                 isFeatured: formData.isFeatured || false,
             };
 
-            console.log('Sending payload:', payload);
+            // Log the payload for debugging
+            console.log('Sending payload:', JSON.stringify(payload, null, 2));
 
             let response;
             if (editingMantra) {
@@ -262,11 +242,11 @@ const ManageMantras = () => {
                         errorMsg = 'A mantra with this name already exists. Please use a different name.';
                     }
                 } else if (error.response.status === 400) {
-                    errorMsg = 'Validation error. Please check all required fields and ensure numbers are valid.';
+                    errorMsg = 'Validation error. Please check all required fields.';
                 } else if (error.response.status === 403) {
                     errorMsg = 'You do not have permission to perform this action.';
                 } else if (error.response.status === 500) {
-                    errorMsg = 'Server error. Please try again later.';
+                    errorMsg = 'Server error. Please check the console for more details.';
                 }
             } else if (error.request) {
                 errorMsg = 'No response from server. Please check your connection.';
@@ -382,10 +362,6 @@ const ManageMantras = () => {
                             setFormData({ ...formData, [key]: value });
                             if (validationErrors[key]) {
                                 setValidationErrors({ ...validationErrors, [key]: '' });
-                            }
-                            // Validate number
-                            if (value && isNaN(parseInt(value))) {
-                                setValidationErrors({ ...validationErrors, [key]: `${label} must be a valid number` });
                             }
                         }}
                         placeholder={placeholder}
