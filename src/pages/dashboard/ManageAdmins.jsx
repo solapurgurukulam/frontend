@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-    Plus, Edit, Trash2, Shield, User, Mail, Phone, Ban, 
+    Plus, Edit, Trash2, Shield, User, Mail, Phone, 
     CheckCircle, X, Users, Award, UserPlus, UserCheck, 
-    Info, AlertCircle, Search, UserX, Send, Verified 
+    Info, AlertCircle, Search, UserX, Send 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -88,7 +88,6 @@ const ManageAdmins = () => {
     const [searchMethod, setSearchMethod] = useState('email');
     const [foundUser, setFoundUser] = useState(null);
     const [searching, setSearching] = useState(false);
-    const [verifying, setVerifying] = useState(false);
 
     useEffect(() => { 
         fetchAdmins();
@@ -103,7 +102,6 @@ const ManageAdmins = () => {
         try {
             const response = await apiClient.get('/admin/all');
             if (response.data.success) {
-                // Show ALL admins including blocked ones
                 setAdmins(response.data.data || []);
             } else {
                 setAdmins([]);
@@ -174,7 +172,7 @@ const ManageAdmins = () => {
         setFoundUser(null);
     };
 
-    // Search User by Email or Phone - Uses GET request to avoid [object Object]
+    // Search User by Email or Phone
     const handleSearchUser = async () => {
         if (!addExistingForm.email && !addExistingForm.phone) {
             return toast.error('Please enter email or phone to search');
@@ -182,20 +180,18 @@ const ManageAdmins = () => {
 
         setSearching(true);
         try {
-            // Use GET request with query parameters
             const params = new URLSearchParams();
             if (addExistingForm.email) params.append('email', addExistingForm.email.trim());
             if (addExistingForm.phone) params.append('phone', addExistingForm.phone.trim());
 
             const response = await apiClient.get(`/admin/search-user?${params.toString()}`);
             if (response.data.success) {
-                // Properly set found user with all data
                 setFoundUser(response.data.data);
                 toast.success('User found successfully!');
                 
                 // Check if user is already an admin
                 if (response.data.data.role === 'admin' || response.data.data.role === 'super_admin') {
-                    toast(`User is already an ${response.data.data.role}`, { icon: '⚠️' });
+                    toast.warning(`User is already an ${response.data.data.role}`);
                 }
             }
         } catch (error) {
@@ -203,51 +199,6 @@ const ManageAdmins = () => {
             toast.error(error.response?.data?.message || 'User not found');
         } finally {
             setSearching(false);
-        }
-    };
-
-    // Verify User (Send Verification Email)
-    // FIX: now sends email/name in the request body so the backend has what
-    // it needs to actually generate + send the mail, and surfaces the REAL
-    // backend error instead of a generic message so you can diagnose why
-    // mail isn't arriving (bad SMTP config, missing field, 500, etc.)
-    const handleVerifyUser = async (userId, email, name) => {
-        if (!userId || !email) {
-            return toast.error('Missing user details — please search again');
-        }
-
-        if (!window.confirm(`Send verification email to ${email}?`)) return;
-
-        setVerifying(true);
-        try {
-            const response = await apiClient.post(`/admin/verify-user/${userId}`, {
-                email,
-                name,
-            });
-
-            if (response.data.success) {
-                toast.success(response.data.message || `Verification email sent to ${email}`);
-                // Refresh user status by searching again
-                await handleSearchUser();
-            } else {
-                // Backend responded 2xx but didn't confirm success — show its message
-                toast.error(response.data.message || 'Email service did not confirm delivery');
-            }
-        } catch (error) {
-            const status = error.response?.status;
-            const backendMsg = error.response?.data?.message;
-            const errorMsg =
-                backendMsg ||
-                (status === 500
-                    ? 'Email server error — check backend mail/SMTP configuration'
-                    : status === 404
-                    ? 'Verify-user endpoint not found — check API route'
-                    : 'Failed to send verification email');
-
-            toast.error(errorMsg);
-            console.error('Verify user error:', status, error.response?.data || error.message);
-        } finally {
-            setVerifying(false);
         }
     };
 
@@ -281,15 +232,14 @@ const ManageAdmins = () => {
             const errorMsg = error.response?.data?.message || 'Failed to create admin';
             const statusCode = error.response?.status;
             
-            // Check if user already exists
             if (statusCode === 400 || 
                 errorMsg.toLowerCase().includes('already exists') || 
                 errorMsg.toLowerCase().includes('duplicate') ||
                 errorMsg.toLowerCase().includes('existing')) {
                 
-                toast.custom(
+                toast.error(
                     (t) => (
-                        <div className="max-w-xs bg-white dark:bg-gray-800 shadow-lg rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+                        <div className="max-w-xs">
                             <p className="font-semibold text-red-700">⚠️ User Already Exists!</p>
                             <p className="text-sm text-gray-600 mt-1">{errorMsg}</p>
                             <div className="flex gap-2 mt-3">
@@ -372,21 +322,19 @@ const ManageAdmins = () => {
             return toast.error(`User is already an ${foundUser.role}`);
         }
 
-        if (!foundUser.isVerified) {
-            return toast.error('User is not verified. Please verify the user first.');
-        }
-
         if (foundUser.isBlocked) {
             return toast.error('Blocked users cannot be assigned as admin');
         }
 
         setLoading(true);
         try {
-            const payload = {};
-            if (foundUser.email) payload.email = foundUser.email;
-            if (foundUser.phone) payload.phone = foundUser.phone;
+            const payload = {
+                email: foundUser.email,
+                phone: foundUser.phone,
+                role: 'admin'
+            };
 
-            const response = await apiClient.post('/admin/add', payload);
+            const response = await apiClient.post('/admin/create', payload);
             if (response.data.success) {
                 toast.success(response.data.message || 'User promoted to Admin successfully');
                 fetchAdmins();
@@ -400,7 +348,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // DELETE ADMIN - Super Admin cannot delete themselves
+    // DELETE ADMIN (Demote to user)
     const handleDeleteAdmin = async (admin) => {
         if (!isSuperAdmin()) {
             return toast.error('Only Super Admin can delete admins');
@@ -417,113 +365,17 @@ const ManageAdmins = () => {
             }
         }
         
-        if (!window.confirm(`Are you sure you want to delete ${admin.name}? This action cannot be undone.`)) return;
+        if (!window.confirm(`Are you sure you want to demote ${admin.name} to regular user?`)) return;
 
         setLoading(true);
         try {
             const response = await apiClient.delete(`/admin/${admin._id}`);
             if (response.data.success) {
-                toast.success(response.data.message || 'User deleted successfully');
+                toast.success(response.data.message || 'Admin demoted to regular user successfully');
                 fetchAdmins();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to delete user');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // BLOCK ADMIN - Super Admin cannot block themselves
-    const handleBlockAdmin = async (admin) => {
-        if (!isSuperAdmin()) {
-            return toast.error('Only Super Admin can block admins');
-        }
-        
-        if (isCurrentUser(admin._id)) {
-            return toast.error('You cannot block your own account');
-        }
-        
-        if (admin.role === 'super_admin') {
-            return toast.error('Cannot block a Super Admin');
-        }
-        
-        if (!window.confirm(`Are you sure you want to block ${admin.name}?`)) return;
-
-        setLoading(true);
-        try {
-            const response = await apiClient.post(`/admin/${admin._id}/block`);
-            if (response.data.success) {
-                toast.success(response.data.message || 'Admin blocked successfully');
-                fetchAdmins();
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to block admin');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // UNBLOCK ADMIN
-    // FIX: previously this showed TWO confirm dialogs back-to-back, and if the
-    // user cancelled the SECOND one, the "restore as admin" choice from the
-    // first dialog was silently discarded and nothing happened at all. Now
-    // there's a single confirm to unblock, then one follow-up choice for
-    // whether to also restore the admin role.
-    const handleUnblockAdmin = async (admin) => {
-        if (!isSuperAdmin()) {
-            return toast.error('Only Super Admin can unblock admins');
-        }
-
-        if (!window.confirm(`Are you sure you want to unblock ${admin.name}?`)) return;
-
-        const shouldRestore = window.confirm(
-            `Also restore ${admin.name} as Admin? Click OK to restore as Admin, Cancel to unblock as a regular user.`
-        );
-
-        setLoading(true);
-        try {
-            const response = await apiClient.post(`/admin/${admin._id}/unblock`, { 
-                restoreAsAdmin: shouldRestore 
-            });
-            if (response.data.success) {
-                toast.success(response.data.message || 'User unblocked successfully');
-                fetchAdmins();
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to unblock user');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // REMOVE ADMIN (Demote to user) - Super Admin cannot remove themselves
-    const handleRemoveAdmin = async (admin) => {
-        if (!isSuperAdmin()) {
-            return toast.error('Only Super Admin can remove admins');
-        }
-        
-        if (isCurrentUser(admin._id)) {
-            return toast.error('You cannot remove your own admin privileges');
-        }
-        
-        if (admin.role === 'super_admin') {
-            const superAdminCount = admins.filter(a => a.role === 'super_admin').length;
-            if (superAdminCount === 1) {
-                return toast.error('Cannot remove the only Super Admin');
-            }
-        }
-        
-        if (!window.confirm(`Are you sure you want to remove admin privileges from ${admin.name}?`)) return;
-
-        setLoading(true);
-        try {
-            const response = await apiClient.post(`/admin/${admin._id}/remove`);
-            if (response.data.success) {
-                toast.success(response.data.message || 'Admin privileges removed successfully');
-                fetchAdmins();
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to remove admin');
+            toast.error(error.response?.data?.message || 'Failed to demote admin');
         } finally {
             setLoading(false);
         }
@@ -553,7 +405,7 @@ const ManageAdmins = () => {
                     {isSuperAdmin() && (
                         <div className="flex flex-wrap gap-3">
                             <button
-                                onClick={() => handleOpenAddExistingModal()}
+                                onClick={handleOpenAddExistingModal}
                                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
                             >
                                 <UserPlus className="h-5 w-5" />
@@ -570,7 +422,7 @@ const ManageAdmins = () => {
                     )}
                 </div>
 
-                {/* Admin Cards Grid - Shows ALL admins including blocked ones */}
+                {/* Admin Cards Grid */}
                 {admins.length === 0 ? (
                     <div className="text-center py-16 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-amber-200/40">
                         <Users className="h-12 w-12 text-amber-400 mx-auto mb-3" />
@@ -580,9 +432,7 @@ const ManageAdmins = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {admins.map((admin, idx) => {
                             const isSuperAdminUser = admin.role === 'super_admin';
-                            const isBlocked = admin.isBlocked;
                             const isSelf = isCurrentUser(admin._id);
-                            const wasAdmin = admin.wasAdmin;
 
                             return (
                                 <motion.div
@@ -592,20 +442,11 @@ const ManageAdmins = () => {
                                     transition={{ delay: idx * 0.05 }}
                                     whileHover={{ y: -4 }}
                                 >
-                                    <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-md border ${isBlocked ? 'border-red-200/50' : 'border-amber-200/40'} overflow-hidden transition-all duration-300`}>
+                                    <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-md border border-amber-200/40 overflow-hidden transition-all duration-300">
                                         <div className={`h-1.5 w-full ${
                                             isSuperAdminUser ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 
-                                            isBlocked ? 'bg-gradient-to-r from-red-400 to-red-600' :
                                             'bg-gradient-to-r from-amber-400 to-amber-600'
                                         }`} />
-
-                                        {isBlocked && (
-                                            <div className="absolute top-4 right-4">
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                                    <Ban className="h-3 w-3" /> Blocked
-                                                </span>
-                                            </div>
-                                        )}
 
                                         {isSelf && (
                                             <div className="absolute top-4 left-4">
@@ -615,24 +456,14 @@ const ManageAdmins = () => {
                                             </div>
                                         )}
 
-                                        {wasAdmin && isBlocked && (
-                                            <div className="absolute bottom-4 right-4">
-                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-orange-100 text-orange-700 rounded-full">
-                                                    <Info className="h-3 w-3" /> Previously Admin
-                                                </span>
-                                            </div>
-                                        )}
-
                                         <div className="p-5">
                                             <div className="flex items-center justify-center mb-4">
                                                 <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${
                                                     isSuperAdminUser ? 'from-purple-100 to-purple-200' : 
-                                                    isBlocked ? 'from-red-100 to-red-200' :
                                                     'from-amber-100 to-amber-200'
                                                 } flex items-center justify-center shadow-inner`}>
                                                     <User className={`h-10 w-10 ${
                                                         isSuperAdminUser ? 'text-purple-700' : 
-                                                        isBlocked ? 'text-red-700' :
                                                         'text-amber-700'
                                                     }`} />
                                                 </div>
@@ -644,11 +475,10 @@ const ManageAdmins = () => {
                                             <div className="text-center mb-4">
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${
                                                     isSuperAdminUser ? 'bg-purple-100 text-purple-700' : 
-                                                    isBlocked ? 'bg-red-100 text-red-700' :
                                                     'bg-amber-100 text-amber-700'
                                                 }`}>
                                                     <Shield className="h-3 w-3" />
-                                                    {isSuperAdminUser ? 'Super Admin' : isBlocked ? 'Blocked' : 'Admin'}
+                                                    {isSuperAdminUser ? 'Super Admin' : 'Admin'}
                                                 </span>
                                             </div>
 
@@ -663,85 +493,30 @@ const ManageAdmins = () => {
                                                         <span>{admin.phone}</span>
                                                     </div>
                                                 )}
-                                                <div className="flex items-center gap-2 text-xs mt-1">
-                                                    <span className={`px-2 py-0.5 rounded-full ${
-                                                        admin.isVerified ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                    }`}>
-                                                        {admin.isVerified ? '✓ Verified' : '⚠ Not Verified'}
-                                                    </span>
-                                                </div>
                                             </div>
 
                                             {/* Action Buttons - Only Super Admin can perform actions */}
                                             {isSuperAdmin() && (
                                                 <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                                    {isBlocked ? (
-                                                        // Show Unblock button for blocked users
+                                                    <button
+                                                        onClick={() => handleOpenEditModal(admin)}
+                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                                                    >
+                                                        <Edit className="h-4 w-4" /> Edit
+                                                    </button>
+                                                    
+                                                    {!isSelf && (
                                                         <button
-                                                            onClick={() => handleUnblockAdmin(admin)}
-                                                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors text-sm font-medium"
+                                                            onClick={() => handleDeleteAdmin(admin)}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
                                                         >
-                                                            <CheckCircle className="h-4 w-4" /> Unblock
+                                                            <Trash2 className="h-4 w-4" /> Demote
                                                         </button>
-                                                    ) : (
-                                                        // Show normal buttons for non-blocked users
-                                                        <>
-                                                            {!isSuperAdminUser && (
-                                                                <>
-                                                                    <button
-                                                                        onClick={() => handleOpenEditModal(admin)}
-                                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
-                                                                    >
-                                                                        <Edit className="h-4 w-4" /> Edit
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleRemoveAdmin(admin)}
-                                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-xl hover:bg-yellow-200 transition-colors text-sm font-medium"
-                                                                    >
-                                                                        <UserX className="h-4 w-4" /> Remove
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleBlockAdmin(admin)}
-                                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                                    >
-                                                                        <Ban className="h-4 w-4" /> Block
-                                                                    </button>
-                                                                </>
-                                                            )}
-
-                                                            {isSuperAdminUser && (
-                                                                <>
-                                                                    <button
-                                                                        onClick={() => handleOpenEditModal(admin)}
-                                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
-                                                                    >
-                                                                        <Edit className="h-4 w-4" /> Edit
-                                                                    </button>
-                                                                    {!isSelf && (
-                                                                        <button
-                                                                            onClick={() => handleDeleteAdmin(admin)}
-                                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                                        >
-                                                                            <Trash2 className="h-4 w-4" /> Delete
-                                                                        </button>
-                                                                    )}
-                                                                    {isSelf && (
-                                                                        <div className="w-full text-center text-xs text-gray-400 py-1">
-                                                                            Cannot delete your own account
-                                                                        </div>
-                                                                    )}
-                                                                </>
-                                                            )}
-
-                                                            {!isSuperAdminUser && (
-                                                                <button
-                                                                    onClick={() => handleDeleteAdmin(admin)}
-                                                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" /> Delete
-                                                                </button>
-                                                            )}
-                                                        </>
+                                                    )}
+                                                    {isSelf && (
+                                                        <div className="w-full text-center text-xs text-gray-400 py-1">
+                                                            Cannot demote your own account
+                                                        </div>
                                                     )}
                                                 </div>
                                             )}
@@ -850,13 +625,6 @@ const ManageAdmins = () => {
                                             <option value="admin">Admin</option>
                                             <option value="super_admin">Super Admin</option>
                                         </select>
-                                    </div>
-
-                                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl">
-                                        <p className="text-sm text-blue-700 dark:text-blue-300">
-                                            <Info className="h-4 w-4 inline mr-1" />
-                                            New admin will be created with verified status
-                                        </p>
                                     </div>
 
                                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
@@ -1137,13 +905,6 @@ const ManageAdmins = () => {
                                                                 Already {foundUser.role}
                                                             </span>
                                                         )}
-                                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                                            foundUser.isVerified 
-                                                                ? 'bg-green-100 text-green-700' 
-                                                                : 'bg-yellow-100 text-yellow-700'
-                                                        }`}>
-                                                            {foundUser.isVerified ? '✅ Verified' : '⚠️ Not Verified'}
-                                                        </span>
                                                         {foundUser.isBlocked && (
                                                             <span className="block mt-1 px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
                                                                 🚫 Blocked
@@ -1151,30 +912,6 @@ const ManageAdmins = () => {
                                                         )}
                                                     </div>
                                                 </div>
-
-                                                {/* Verify Button - Only show if not verified */}
-                                                {!foundUser.isVerified && !foundUser.isBlocked && (
-                                                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleVerifyUser(foundUser._id, foundUser.email, foundUser.name)}
-                                                            disabled={verifying}
-                                                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition disabled:opacity-50"
-                                                        >
-                                                            {verifying ? (
-                                                                'Sending...'
-                                                            ) : (
-                                                                <>
-                                                                    <Send className="h-4 w-4" />
-                                                                    Send Verification Email
-                                                                </>
-                                                            )}
-                                                        </button>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                                                            User must verify their email before becoming admin
-                                                        </p>
-                                                    </div>
-                                                )}
 
                                                 {/* Show message if already admin */}
                                                 {(foundUser.role === 'admin' || foundUser.role === 'super_admin') && (
@@ -1196,12 +933,12 @@ const ManageAdmins = () => {
                                             </div>
                                         )}
 
-                                        {/* Verification Status Warning */}
-                                        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-xl border border-yellow-200 dark:border-yellow-800">
-                                            <p className="text-sm text-yellow-700 dark:text-yellow-300 flex items-start gap-2">
-                                                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                                        {/* Note - Removed verification requirement */}
+                                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-200 dark:border-blue-800">
+                                            <p className="text-sm text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                                                <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
                                                 <span>
-                                                    <strong>Important:</strong> User must already be <strong>registered</strong> and <strong>verified</strong> before they can be promoted to Admin.
+                                                    <strong>Note:</strong> User must already be <strong>registered</strong> before they can be promoted to Admin. No verification required.
                                                 </span>
                                             </p>
                                         </div>
@@ -1216,7 +953,7 @@ const ManageAdmins = () => {
                                             </button>
                                             <button
                                                 type="submit"
-                                                disabled={loading || !foundUser || !foundUser.isVerified || foundUser.isBlocked || foundUser.role === 'admin' || foundUser.role === 'super_admin'}
+                                                disabled={loading || !foundUser || foundUser.isBlocked || foundUser.role === 'admin' || foundUser.role === 'super_admin'}
                                                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 {loading ? 'Processing...' : 'Add as Admin'}
