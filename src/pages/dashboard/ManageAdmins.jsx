@@ -62,6 +62,7 @@ const ManageAdmins = () => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isAddExistingModalOpen, setIsAddExistingModalOpen] = useState(false);
     const [editingAdmin, setEditingAdmin] = useState(null);
+    const [currentUserRole, setCurrentUserRole] = useState(null);
     
     // Form states
     const [createForm, setCreateForm] = useState({
@@ -88,7 +89,12 @@ const ManageAdmins = () => {
     const [searching, setSearching] = useState(false);
     const [verifying, setVerifying] = useState(false);
 
-    useEffect(() => { fetchAdmins(); }, []);
+    useEffect(() => { 
+        fetchAdmins();
+        // Get current user role from localStorage
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        setCurrentUserRole(user.role);
+    }, []);
 
     const fetchAdmins = async () => {
         setLoading(true);
@@ -105,8 +111,14 @@ const ManageAdmins = () => {
         }
     };
 
+    // Check if current user is Super Admin
+    const isSuperAdmin = () => currentUserRole === 'super_admin';
+
     // Open Create New Admin Modal
     const handleOpenCreateModal = () => {
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can create new admins');
+        }
         setCreateForm({ name: '', email: '', phone: '', password: '', role: 'admin' });
         setIsCreateModalOpen(true);
     };
@@ -118,6 +130,9 @@ const ManageAdmins = () => {
 
     // Open Edit Admin Modal
     const handleOpenEditModal = (admin) => {
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can edit admins');
+        }
         setEditingAdmin(admin);
         setEditForm({
             name: admin.name || '',
@@ -135,6 +150,9 @@ const ManageAdmins = () => {
 
     // Open Add Existing User Modal
     const handleOpenAddExistingModal = () => {
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can add existing users as admins');
+        }
         setAddExistingForm({ email: '', phone: '' });
         setSearchMethod('email');
         setFoundUser(null);
@@ -147,7 +165,7 @@ const ManageAdmins = () => {
         setFoundUser(null);
     };
 
-    // ✅ NEW: Search User by Email or Phone
+    // Search User by Email or Phone
     const handleSearchUser = async () => {
         if (!addExistingForm.email && !addExistingForm.phone) {
             return toast.error('Please enter email or phone to search');
@@ -163,6 +181,11 @@ const ManageAdmins = () => {
             if (response.data.success) {
                 setFoundUser(response.data.data);
                 toast.success('User found successfully!');
+                
+                // ✅ Check if user is already an admin
+                if (response.data.data.role === 'admin' || response.data.data.role === 'super_admin') {
+                    toast.warning(`User is already an ${response.data.data.role}`);
+                }
             }
         } catch (error) {
             setFoundUser(null);
@@ -172,7 +195,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // ✅ NEW: Verify User (Send Verification Email)
+    // Verify User (Send Verification Email)
     const handleVerifyUser = async (userId, email, name) => {
         if (!window.confirm(`Send verification email to ${email}?`)) return;
 
@@ -218,7 +241,13 @@ const ManageAdmins = () => {
                 handleCloseCreateModal();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to create admin');
+            // ✅ Better error handling for duplicate user
+            const errorMsg = error.response?.data?.message || 'Failed to create admin';
+            if (errorMsg.includes('already exists')) {
+                toast.error('User already exists with this email or phone. Please use "Add Existing User" instead.');
+            } else {
+                toast.error(errorMsg);
+            }
         } finally {
             setLoading(false);
         }
@@ -227,6 +256,10 @@ const ManageAdmins = () => {
     // UPDATE ADMIN
     const handleUpdateAdmin = async (e) => {
         e.preventDefault();
+        
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can update admins');
+        }
         
         if (!editForm.name.trim()) return toast.error('Name is required');
 
@@ -255,8 +288,17 @@ const ManageAdmins = () => {
     const handleAddExistingAdmin = async (e) => {
         e.preventDefault();
         
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can add existing users as admins');
+        }
+        
         if (!foundUser) {
             return toast.error('Please search and find the user first');
+        }
+
+        // ✅ Check if user is already an admin
+        if (foundUser.role === 'admin' || foundUser.role === 'super_admin') {
+            return toast.error(`User is already an ${foundUser.role}`);
         }
 
         if (!foundUser.isVerified) {
@@ -286,79 +328,12 @@ const ManageAdmins = () => {
         }
     };
 
-    // BLOCK ADMIN
-    const handleBlockAdmin = async (admin) => {
-        if (admin.role === 'super_admin') {
-            return toast.error('Cannot block a Super Admin');
-        }
-        
-        if (!window.confirm(`Are you sure you want to block ${admin.name}?`)) return;
-
-        setLoading(true);
-        try {
-            const response = await apiClient.post(`/admin/${admin._id}/block`);
-            if (response.data.success) {
-                toast.success(response.data.message || 'Admin blocked successfully');
-                fetchAdmins();
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to block admin');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // UNBLOCK ADMIN
-    const handleUnblockAdmin = async (admin) => {
-        const shouldRestore = window.confirm(
-            `Do you want to restore ${admin.name} as Admin? Click OK to restore, Cancel to keep as regular user.`
-        );
-        
-        if (!window.confirm(`Are you sure you want to unblock ${admin.name}?`)) return;
-
-        setLoading(true);
-        try {
-            const response = await apiClient.post(`/admin/${admin._id}/unblock`, { 
-                restoreAsAdmin: shouldRestore 
-            });
-            if (response.data.success) {
-                toast.success(response.data.message || 'User unblocked successfully');
-                fetchAdmins();
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to unblock user');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // REMOVE ADMIN (Demote to user)
-    const handleRemoveAdmin = async (admin) => {
-        if (admin.role === 'super_admin') {
-            const superAdminCount = admins.filter(a => a.role === 'super_admin').length;
-            if (superAdminCount === 1) {
-                return toast.error('Cannot remove the only Super Admin');
-            }
-        }
-        
-        if (!window.confirm(`Are you sure you want to remove admin privileges from ${admin.name}?`)) return;
-
-        setLoading(true);
-        try {
-            const response = await apiClient.post(`/admin/${admin._id}/remove`);
-            if (response.data.success) {
-                toast.success(response.data.message || 'Admin privileges removed successfully');
-                fetchAdmins();
-            }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to remove admin');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // DELETE ADMIN
+    // DELETE ADMIN - Super Admin only
     const handleDeleteAdmin = async (admin) => {
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can delete admins');
+        }
+        
         if (admin.role === 'super_admin') {
             const superAdminCount = admins.filter(a => a.role === 'super_admin').length;
             if (superAdminCount === 1) {
@@ -382,6 +357,89 @@ const ManageAdmins = () => {
         }
     };
 
+    // BLOCK ADMIN - Super Admin only
+    const handleBlockAdmin = async (admin) => {
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can block admins');
+        }
+        
+        if (admin.role === 'super_admin') {
+            return toast.error('Cannot block a Super Admin');
+        }
+        
+        if (!window.confirm(`Are you sure you want to block ${admin.name}?`)) return;
+
+        setLoading(true);
+        try {
+            const response = await apiClient.post(`/admin/${admin._id}/block`);
+            if (response.data.success) {
+                toast.success(response.data.message || 'Admin blocked successfully');
+                fetchAdmins();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to block admin');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // UNBLOCK ADMIN - Super Admin only
+    const handleUnblockAdmin = async (admin) => {
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can unblock admins');
+        }
+        
+        const shouldRestore = window.confirm(
+            `Do you want to restore ${admin.name} as Admin? Click OK to restore, Cancel to keep as regular user.`
+        );
+        
+        if (!window.confirm(`Are you sure you want to unblock ${admin.name}?`)) return;
+
+        setLoading(true);
+        try {
+            const response = await apiClient.post(`/admin/${admin._id}/unblock`, { 
+                restoreAsAdmin: shouldRestore 
+            });
+            if (response.data.success) {
+                toast.success(response.data.message || 'User unblocked successfully');
+                fetchAdmins();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to unblock user');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // REMOVE ADMIN (Demote to user) - Super Admin only
+    const handleRemoveAdmin = async (admin) => {
+        if (!isSuperAdmin()) {
+            return toast.error('Only Super Admin can remove admins');
+        }
+        
+        if (admin.role === 'super_admin') {
+            const superAdminCount = admins.filter(a => a.role === 'super_admin').length;
+            if (superAdminCount === 1) {
+                return toast.error('Cannot remove the only Super Admin');
+            }
+        }
+        
+        if (!window.confirm(`Are you sure you want to remove admin privileges from ${admin.name}?`)) return;
+
+        setLoading(true);
+        try {
+            const response = await apiClient.post(`/admin/${admin._id}/remove`);
+            if (response.data.success) {
+                toast.success(response.data.message || 'Admin privileges removed successfully');
+                fetchAdmins();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to remove admin');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     if (loading && admins.length === 0) return <Loader />;
 
     return (
@@ -396,24 +454,31 @@ const ManageAdmins = () => {
                         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Manage Administrators</h1>
                         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
                             Total {admins.length} admin {admins.length === 1 ? 'user' : 'users'}
+                            {currentUserRole === 'super_admin' && (
+                                <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                                    Super Admin
+                                </span>
+                            )}
                         </p>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                        <button
-                            onClick={handleOpenAddExistingModal}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
-                        >
-                            <UserPlus className="h-5 w-5" />
-                            Add Existing User
-                        </button>
-                        <button
-                            onClick={handleOpenCreateModal}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
-                        >
-                            <Plus className="h-5 w-5" />
-                            Create New Admin
-                        </button>
-                    </div>
+                    {isSuperAdmin() && (
+                        <div className="flex flex-wrap gap-3">
+                            <button
+                                onClick={handleOpenAddExistingModal}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
+                            >
+                                <UserPlus className="h-5 w-5" />
+                                Add Existing User
+                            </button>
+                            <button
+                                onClick={handleOpenCreateModal}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
+                            >
+                                <Plus className="h-5 w-5" />
+                                Create New Admin
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Admin Cards Grid */}
@@ -425,8 +490,9 @@ const ManageAdmins = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {admins.map((admin, idx) => {
-                            const isSuperAdmin = admin.role === 'super_admin';
+                            const isSuperAdminUser = admin.role === 'super_admin';
                             const isBlocked = admin.isBlocked;
+                            const canEdit = isSuperAdmin();
 
                             return (
                                 <motion.div
@@ -438,7 +504,7 @@ const ManageAdmins = () => {
                                 >
                                     <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-md border ${isBlocked ? 'border-red-200/50 opacity-75' : 'border-amber-200/40'} overflow-hidden transition-all duration-300`}>
                                         <div className={`h-1.5 w-full ${
-                                            isSuperAdmin ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 
+                                            isSuperAdminUser ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 
                                             isBlocked ? 'bg-gradient-to-r from-red-400 to-red-600' :
                                             'bg-gradient-to-r from-amber-400 to-amber-600'
                                         }`} />
@@ -454,12 +520,12 @@ const ManageAdmins = () => {
                                         <div className="p-5">
                                             <div className="flex items-center justify-center mb-4">
                                                 <div className={`w-20 h-20 rounded-full bg-gradient-to-br ${
-                                                    isSuperAdmin ? 'from-purple-100 to-purple-200' : 
+                                                    isSuperAdminUser ? 'from-purple-100 to-purple-200' : 
                                                     isBlocked ? 'from-red-100 to-red-200' :
                                                     'from-amber-100 to-amber-200'
                                                 } flex items-center justify-center shadow-inner`}>
                                                     <User className={`h-10 w-10 ${
-                                                        isSuperAdmin ? 'text-purple-700' : 
+                                                        isSuperAdminUser ? 'text-purple-700' : 
                                                         isBlocked ? 'text-red-700' :
                                                         'text-amber-700'
                                                     }`} />
@@ -471,12 +537,12 @@ const ManageAdmins = () => {
                                             </h3>
                                             <div className="text-center mb-4">
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${
-                                                    isSuperAdmin ? 'bg-purple-100 text-purple-700' : 
+                                                    isSuperAdminUser ? 'bg-purple-100 text-purple-700' : 
                                                     isBlocked ? 'bg-red-100 text-red-700' :
                                                     'bg-amber-100 text-amber-700'
                                                 }`}>
                                                     <Shield className="h-3 w-3" />
-                                                    {isSuperAdmin ? 'Super Admin' : isBlocked ? 'Blocked' : 'Admin'}
+                                                    {isSuperAdminUser ? 'Super Admin' : isBlocked ? 'Blocked' : 'Admin'}
                                                 </span>
                                             </div>
 
@@ -500,65 +566,78 @@ const ManageAdmins = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                                {!isBlocked && !isSuperAdmin && (
-                                                    <>
+                                            {/* ✅ Action Buttons - Only Super Admin can perform actions */}
+                                            {isSuperAdmin() && (
+                                                <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                                    {!isBlocked && !isSuperAdminUser && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleOpenEditModal(admin)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                                                            >
+                                                                <Edit className="h-4 w-4" /> Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRemoveAdmin(admin)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-xl hover:bg-yellow-200 transition-colors text-sm font-medium"
+                                                            >
+                                                                <UserX className="h-4 w-4" /> Remove
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleBlockAdmin(admin)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                            >
+                                                                <Ban className="h-4 w-4" /> Block
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    
+                                                    {isBlocked && (
                                                         <button
-                                                            onClick={() => handleOpenEditModal(admin)}
-                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                                                            onClick={() => handleUnblockAdmin(admin)}
+                                                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors text-sm font-medium"
                                                         >
-                                                            <Edit className="h-4 w-4" /> Edit
+                                                            <CheckCircle className="h-4 w-4" /> Unblock
                                                         </button>
-                                                        <button
-                                                            onClick={() => handleRemoveAdmin(admin)}
-                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-yellow-100 text-yellow-700 rounded-xl hover:bg-yellow-200 transition-colors text-sm font-medium"
-                                                        >
-                                                            <UserX className="h-4 w-4" /> Remove
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleBlockAdmin(admin)}
-                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                        >
-                                                            <Ban className="h-4 w-4" /> Block
-                                                        </button>
-                                                    </>
-                                                )}
-                                                
-                                                {isBlocked && (
-                                                    <button
-                                                        onClick={() => handleUnblockAdmin(admin)}
-                                                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors text-sm font-medium"
-                                                    >
-                                                        <CheckCircle className="h-4 w-4" /> Unblock
-                                                    </button>
-                                                )}
+                                                    )}
 
-                                                {isSuperAdmin && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => handleOpenEditModal(admin)}
-                                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
-                                                        >
-                                                            <Edit className="h-4 w-4" /> Edit
-                                                        </button>
+                                                    {isSuperAdminUser && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleOpenEditModal(admin)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+                                                            >
+                                                                <Edit className="h-4 w-4" /> Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteAdmin(admin)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" /> Delete
+                                                            </button>
+                                                        </>
+                                                    )}
+
+                                                    {!isSuperAdminUser && !isBlocked && (
                                                         <button
                                                             onClick={() => handleDeleteAdmin(admin)}
                                                             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
                                                         >
                                                             <Trash2 className="h-4 w-4" /> Delete
                                                         </button>
-                                                    </>
-                                                )}
-
-                                                {!isSuperAdmin && !isBlocked && (
-                                                    <button
-                                                        onClick={() => handleDeleteAdmin(admin)}
-                                                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-100 text-red-700 rounded-xl hover:bg-red-200 transition-colors text-sm font-medium"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" /> Delete
-                                                    </button>
-                                                )}
-                                            </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            
+                                            {/* Non-Super Admin view - no action buttons */}
+                                            {!isSuperAdmin() && (
+                                                <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                                    <p className="text-xs text-gray-400 text-center">
+                                                        <Shield className="h-3 w-3 inline mr-1" />
+                                                        Contact Super Admin for changes
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </motion.div>
@@ -575,9 +654,9 @@ const ManageAdmins = () => {
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-amber-200/50"
+                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-amber-200/50 max-h-[90vh] overflow-y-auto"
                             >
-                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
+                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                                         <UserPlus className="h-5 w-5 inline mr-2 text-amber-500" />
                                         Create New Admin
@@ -693,9 +772,9 @@ const ManageAdmins = () => {
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
-                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-amber-200/50"
+                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-amber-200/50 max-h-[90vh] overflow-y-auto"
                             >
-                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
+                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                                         <Edit className="h-5 w-5 inline mr-2 text-amber-500" />
                                         Edit {editingAdmin.name}
@@ -784,7 +863,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin - WITH VERIFY BUTTON */}
+                {/* MODAL 3: Add Existing User as Admin */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -794,7 +873,7 @@ const ManageAdmins = () => {
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-green-200/50 max-h-[90vh] overflow-y-auto"
                             >
-                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
+                                <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                                         <UserCheck className="h-5 w-5 inline mr-2 text-green-500" />
                                         Add Existing User as Admin
@@ -936,6 +1015,12 @@ const ManageAdmins = () => {
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
+                                                        {/* ✅ Show if user is already admin */}
+                                                        {(foundUser.role === 'admin' || foundUser.role === 'super_admin') && (
+                                                            <span className="block px-2 py-1 text-xs font-medium bg-purple-100 text-purple-700 rounded-full mb-1">
+                                                                Already {foundUser.role}
+                                                            </span>
+                                                        )}
                                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                                             foundUser.isVerified 
                                                                 ? 'bg-green-100 text-green-700' 
@@ -951,8 +1036,8 @@ const ManageAdmins = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* ✅ VERIFY BUTTON - Only show if not verified */}
-                                                {!foundUser.isVerified && (
+                                                {/* Verify Button - Only show if not verified */}
+                                                {!foundUser.isVerified && !foundUser.isBlocked && (
                                                     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                                                         <button
                                                             type="button"
@@ -971,6 +1056,24 @@ const ManageAdmins = () => {
                                                         </button>
                                                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
                                                             User must verify their email before becoming admin
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {/* ✅ Show message if already admin */}
+                                                {(foundUser.role === 'admin' || foundUser.role === 'super_admin') && (
+                                                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                                                        <p className="text-sm text-purple-600 dark:text-purple-400 text-center">
+                                                            This user is already an {foundUser.role}
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                {/* Show blocked message */}
+                                                {foundUser.isBlocked && (
+                                                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                                                        <p className="text-sm text-red-600 dark:text-red-400 text-center">
+                                                            This user is blocked and cannot be promoted
                                                         </p>
                                                     </div>
                                                 )}
@@ -997,7 +1100,7 @@ const ManageAdmins = () => {
                                             </button>
                                             <button
                                                 type="submit"
-                                                disabled={loading || !foundUser || !foundUser.isVerified || foundUser.isBlocked}
+                                                disabled={loading || !foundUser || !foundUser.isVerified || foundUser.isBlocked || foundUser.role === 'admin' || foundUser.role === 'super_admin'}
                                                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 {loading ? 'Processing...' : 'Add as Admin'}
