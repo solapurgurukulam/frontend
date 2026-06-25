@@ -103,13 +103,8 @@ const ManageAdmins = () => {
         try {
             const response = await apiClient.get('/admin/all');
             if (response.data.success) {
-                // Filter out blocked users who are not admins and not wasAdmin
-                const filteredAdmins = response.data.data.filter(admin => 
-                    admin.role === 'admin' || 
-                    admin.role === 'super_admin' || 
-                    (admin.isBlocked && admin.wasAdmin === true)
-                );
-                setAdmins(filteredAdmins);
+                // ✅ Show ALL admins including blocked ones
+                setAdmins(response.data.data || []);
             } else {
                 setAdmins([]);
             }
@@ -563,7 +558,7 @@ const ManageAdmins = () => {
                                     transition={{ delay: idx * 0.05 }}
                                     whileHover={{ y: -4 }}
                                 >
-                                    <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-md border ${isBlocked ? 'border-red-200/50 opacity-75' : 'border-amber-200/40'} overflow-hidden transition-all duration-300`}>
+                                    <div className={`relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-md border ${isBlocked ? 'border-red-200/50' : 'border-amber-200/40'} overflow-hidden transition-all duration-300`}>
                                         <div className={`h-1.5 w-full ${
                                             isSuperAdminUser ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 
                                             isBlocked ? 'bg-gradient-to-r from-red-400 to-red-600' :
@@ -647,7 +642,7 @@ const ManageAdmins = () => {
                                             {isSuperAdmin() && (
                                                 <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
                                                     {isBlocked ? (
-                                                        // Show Unblock button for blocked users
+                                                        // ✅ Show Unblock button for blocked users
                                                         <button
                                                             onClick={() => handleUnblockAdmin(admin)}
                                                             className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors text-sm font-medium"
@@ -951,7 +946,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin - NO AUTO-SEARCH */}
+                {/* MODAL 3: Add Existing User as Admin - Fixed placeholder issue */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1021,7 +1016,7 @@ const ManageAdmins = () => {
                                             </div>
                                         </div>
 
-                                        {/* Input Field */}
+                                        {/* Input Field - FIXED: Removed [object Object] */}
                                         {searchMethod === 'email' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1037,7 +1032,7 @@ const ManageAdmins = () => {
                                                             phone: '' 
                                                         })}
                                                         className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                                        placeholder="user@example.com"
+                                                        placeholder="Enter user email"
                                                         required={searchMethod === 'email'}
                                                     />
                                                     <button
@@ -1065,7 +1060,7 @@ const ManageAdmins = () => {
                                                             email: '' 
                                                         })}
                                                         className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                                        placeholder="+91 1234567890"
+                                                        placeholder="Enter phone number"
                                                         required={searchMethod === 'phone'}
                                                     />
                                                     <button
