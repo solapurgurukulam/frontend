@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Plus, Edit, Trash2, Shield, User, Mail, Phone, Ban, 
     CheckCircle, X, Users, Award, UserPlus, UserCheck, 
-    Info, AlertCircle, Search, UserX 
+    Info, AlertCircle, Search, UserX, Send, Verified 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -86,6 +86,7 @@ const ManageAdmins = () => {
     const [searchMethod, setSearchMethod] = useState('email');
     const [foundUser, setFoundUser] = useState(null);
     const [searching, setSearching] = useState(false);
+    const [verifying, setVerifying] = useState(false);
 
     useEffect(() => { fetchAdmins(); }, []);
 
@@ -144,6 +145,50 @@ const ManageAdmins = () => {
         setIsAddExistingModalOpen(false);
         setAddExistingForm({ email: '', phone: '' });
         setFoundUser(null);
+    };
+
+    // ✅ NEW: Search User by Email or Phone
+    const handleSearchUser = async () => {
+        if (!addExistingForm.email && !addExistingForm.phone) {
+            return toast.error('Please enter email or phone to search');
+        }
+
+        setSearching(true);
+        try {
+            const payload = {};
+            if (addExistingForm.email) payload.email = addExistingForm.email.trim();
+            if (addExistingForm.phone) payload.phone = addExistingForm.phone.trim();
+
+            const response = await apiClient.post('/admin/search-user', payload);
+            if (response.data.success) {
+                setFoundUser(response.data.data);
+                toast.success('User found successfully!');
+            }
+        } catch (error) {
+            setFoundUser(null);
+            toast.error(error.response?.data?.message || 'User not found');
+        } finally {
+            setSearching(false);
+        }
+    };
+
+    // ✅ NEW: Verify User (Send Verification Email)
+    const handleVerifyUser = async (userId, email, name) => {
+        if (!window.confirm(`Send verification email to ${email}?`)) return;
+
+        setVerifying(true);
+        try {
+            const response = await apiClient.post(`/admin/verify-user/${userId}`);
+            if (response.data.success) {
+                toast.success(`Verification email sent to ${email}`);
+                // Refresh user status
+                await handleSearchUser();
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to send verification email');
+        } finally {
+            setVerifying(false);
+        }
     };
 
     // CREATE NEW ADMIN
@@ -210,15 +255,23 @@ const ManageAdmins = () => {
     const handleAddExistingAdmin = async (e) => {
         e.preventDefault();
         
-        if (!addExistingForm.email && !addExistingForm.phone) {
-            return toast.error('Please provide email or phone to find the user');
+        if (!foundUser) {
+            return toast.error('Please search and find the user first');
+        }
+
+        if (!foundUser.isVerified) {
+            return toast.error('User is not verified. Please verify the user first.');
+        }
+
+        if (foundUser.isBlocked) {
+            return toast.error('Blocked users cannot be assigned as admin');
         }
 
         setLoading(true);
         try {
             const payload = {};
-            if (addExistingForm.email) payload.email = addExistingForm.email.trim();
-            if (addExistingForm.phone) payload.phone = addExistingForm.phone.trim();
+            if (foundUser.email) payload.email = foundUser.email;
+            if (foundUser.phone) payload.phone = foundUser.phone;
 
             const response = await apiClient.post('/admin/add', payload);
             if (response.data.success) {
@@ -731,7 +784,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin - UPDATED */}
+                {/* MODAL 3: Add Existing User as Admin - WITH VERIFY BUTTON */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -760,6 +813,7 @@ const ManageAdmins = () => {
                                     </div>
 
                                     <form onSubmit={handleAddExistingAdmin} className="space-y-4">
+                                        {/* Search Section */}
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 Search by
@@ -800,41 +854,126 @@ const ManageAdmins = () => {
                                             </div>
                                         </div>
 
+                                        {/* Input Field */}
                                         {searchMethod === 'email' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                                     Email <span className="text-red-500">*</span>
                                                 </label>
-                                                <input
-                                                    type="email"
-                                                    value={addExistingForm.email}
-                                                    onChange={(e) => setAddExistingForm({ 
-                                                        ...addExistingForm, 
-                                                        email: e.target.value, 
-                                                        phone: '' 
-                                                    })}
-                                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                                    placeholder="user@example.com"
-                                                    required={searchMethod === 'email'}
-                                                />
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="email"
+                                                        value={addExistingForm.email}
+                                                        onChange={(e) => setAddExistingForm({ 
+                                                            ...addExistingForm, 
+                                                            email: e.target.value, 
+                                                            phone: '' 
+                                                        })}
+                                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                        placeholder="user@example.com"
+                                                        required={searchMethod === 'email'}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSearchUser}
+                                                        disabled={searching}
+                                                        className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition disabled:opacity-50"
+                                                    >
+                                                        {searching ? '...' : <Search className="h-5 w-5" />}
+                                                    </button>
+                                                </div>
                                             </div>
                                         ) : (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                                     Phone Number <span className="text-red-500">*</span>
                                                 </label>
-                                                <input
-                                                    type="tel"
-                                                    value={addExistingForm.phone}
-                                                    onChange={(e) => setAddExistingForm({ 
-                                                        ...addExistingForm, 
-                                                        phone: e.target.value, 
-                                                        email: '' 
-                                                    })}
-                                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                                                    placeholder="+91 1234567890"
-                                                    required={searchMethod === 'phone'}
-                                                />
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="tel"
+                                                        value={addExistingForm.phone}
+                                                        onChange={(e) => setAddExistingForm({ 
+                                                            ...addExistingForm, 
+                                                            phone: e.target.value, 
+                                                            email: '' 
+                                                        })}
+                                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                        placeholder="+91 1234567890"
+                                                        required={searchMethod === 'phone'}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleSearchUser}
+                                                        disabled={searching}
+                                                        className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition disabled:opacity-50"
+                                                    >
+                                                        {searching ? '...' : <Search className="h-5 w-5" />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Found User Details */}
+                                        {foundUser && (
+                                            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-200 dark:border-gray-600">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                                            <User className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-900 dark:text-white">
+                                                                {foundUser.name}
+                                                            </p>
+                                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                                {foundUser.email}
+                                                            </p>
+                                                            {foundUser.phone && (
+                                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                                    {foundUser.phone}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                            foundUser.isVerified 
+                                                                ? 'bg-green-100 text-green-700' 
+                                                                : 'bg-yellow-100 text-yellow-700'
+                                                        }`}>
+                                                            {foundUser.isVerified ? '✅ Verified' : '⚠️ Not Verified'}
+                                                        </span>
+                                                        {foundUser.isBlocked && (
+                                                            <span className="block mt-1 px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                                                🚫 Blocked
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* ✅ VERIFY BUTTON - Only show if not verified */}
+                                                {!foundUser.isVerified && (
+                                                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleVerifyUser(foundUser._id, foundUser.email, foundUser.name)}
+                                                            disabled={verifying}
+                                                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition disabled:opacity-50"
+                                                        >
+                                                            {verifying ? (
+                                                                'Sending...'
+                                                            ) : (
+                                                                <>
+                                                                    <Send className="h-4 w-4" />
+                                                                    Send Verification Email
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                                                            User must verify their email before becoming admin
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -858,8 +997,8 @@ const ManageAdmins = () => {
                                             </button>
                                             <button
                                                 type="submit"
-                                                disabled={loading}
-                                                className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                                                disabled={loading || !foundUser || !foundUser.isVerified || foundUser.isBlocked}
+                                                className="px-4 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 {loading ? 'Processing...' : 'Add as Admin'}
                                             </button>
