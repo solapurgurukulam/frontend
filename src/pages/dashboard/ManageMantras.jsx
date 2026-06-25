@@ -132,6 +132,7 @@ const ManageMantras = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [fetchError, setFetchError] = useState(null);
     const [validationErrors, setValidationErrors] = useState({});
+    const [selectedFile, setSelectedFile] = useState(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -166,10 +167,10 @@ const ManageMantras = () => {
         fetchData();
     }, [fetchData]);
 
-    // Validate form before submission
     const validateForm = () => {
         const errors = {};
         
+        // Check all required fields
         if (!formData.name?.trim()) errors.name = 'Mantra name is required';
         if (!formData.category) errors.category = 'Please select a category';
         if (!formData.sanskrit?.trim()) errors.sanskrit = 'Sanskrit text is required';
@@ -189,55 +190,68 @@ const ManageMantras = () => {
         setError(null);
         setValidationErrors({});
 
-        // Validate form
-        if (!validateForm()) {
-            // Show first error as toast
-            const firstError = Object.values(validationErrors)[0];
-            toast.error(firstError);
+        // Check if categories exist
+        if (categoriesList.length === 0) {
+            toast.error('No categories available. Please create a category first.');
             return;
         }
 
-        // Check if category exists
-        if (categoriesList.length === 0) {
-            toast.error('No categories available. Please create a category first.');
+        // Validate form
+        if (!validateForm()) {
+            const firstError = Object.values(validationErrors)[0];
+            toast.error(firstError);
             return;
         }
 
         setIsSubmitting(true);
         
         try {
-            const payload = {
-                name: formData.name.trim(),
-                sanskrit: formData.sanskrit.trim(),
-                kannada: formData.kannada.trim(),
-                marathi: formData.marathi.trim(),
-                tamil: formData.tamil.trim(),
-                hindi: formData.hindi?.trim() || '',
-                english: formData.english?.trim() || '',
-                benefits: formData.benefits.trim(),
-                howToChant: formData.howToChant.trim(),
-                bestTime: formData.bestTime.trim(),
-                recommendedCount: parseInt(formData.recommendedCount) || 108,
-                meaning: formData.meaning?.trim() || '',
-                audioUrl: formData.audioUrl?.trim() || '',
-                category: formData.category,
-                order: parseInt(formData.order) || 0,
-                isFeatured: formData.isFeatured || false,
-                isActive: true,
-            };
+            // Create FormData for file upload
+            const formDataToSend = new FormData();
+            
+            // Add all required fields
+            formDataToSend.append('name', formData.name.trim());
+            formDataToSend.append('sanskrit', formData.sanskrit.trim());
+            formDataToSend.append('kannada', formData.kannada.trim());
+            formDataToSend.append('marathi', formData.marathi.trim());
+            formDataToSend.append('tamil', formData.tamil.trim());
+            formDataToSend.append('benefits', formData.benefits.trim());
+            formDataToSend.append('howToChant', formData.howToChant.trim());
+            formDataToSend.append('bestTime', formData.bestTime.trim());
+            
+            // Add optional fields
+            formDataToSend.append('hindi', formData.hindi?.trim() || '');
+            formDataToSend.append('english', formData.english?.trim() || '');
+            formDataToSend.append('meaning', formData.meaning?.trim() || '');
+            formDataToSend.append('audioUrl', formData.audioUrl?.trim() || '');
+            formDataToSend.append('category', formData.category);
+            formDataToSend.append('recommendedCount', formData.recommendedCount || 108);
+            formDataToSend.append('order', formData.order || 0);
+            formDataToSend.append('isFeatured', formData.isFeatured ? 'true' : 'false');
+            
+            // Add image if selected
+            if (selectedFile) {
+                formDataToSend.append('image', selectedFile);
+            }
 
-            console.log('Sending payload:', payload); // Debug log
+            console.log('Sending FormData with fields:', Object.fromEntries(formDataToSend));
 
             let response;
+            const config = {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            };
+
             if (editingMantra) {
-                response = await apiClient.put(`/mantras/${editingMantra._id}`, payload);
+                response = await apiClient.put(`/mantras/${editingMantra._id}`, formDataToSend, config);
                 if (response.data.success) {
                     toast.success('Mantra updated successfully!');
                     await fetchData();
                     closeForm();
                 }
             } else {
-                response = await apiClient.post('/mantras', payload);
+                response = await apiClient.post('/mantras', formDataToSend, config);
                 if (response.data.success) {
                     toast.success('Mantra created successfully!');
                     await fetchData();
@@ -247,23 +261,28 @@ const ManageMantras = () => {
         } catch (error) {
             console.error('Save mantra error:', error);
             
-            // Better error handling
             let errorMsg = 'Failed to save mantra. Please try again.';
             
             if (error.response) {
-                // The request was made and the server responded with a status code
                 console.error('Response data:', error.response.data);
                 console.error('Response status:', error.response.status);
                 
+                // Check for specific error messages
                 if (error.response.data?.message) {
                     errorMsg = error.response.data.message;
+                    
+                    // If it's a duplicate name error, provide better message
+                    if (errorMsg.toLowerCase().includes('already exists')) {
+                        errorMsg = 'A mantra with this name already exists. Please use a different name.';
+                    }
                 } else if (error.response.status === 400) {
                     errorMsg = 'Validation error. Please check all required fields.';
+                } else if (error.response.status === 403) {
+                    errorMsg = 'You do not have permission to perform this action.';
                 } else if (error.response.status === 500) {
                     errorMsg = 'Server error. Please try again later.';
                 }
             } else if (error.request) {
-                // The request was made but no response was received
                 errorMsg = 'No response from server. Please check your connection.';
             }
             
@@ -316,6 +335,7 @@ const ManageMantras = () => {
             setEditingMantra(null);
             setFormData(EMPTY_FORM);
         }
+        setSelectedFile(null);
         setError(null);
         setValidationErrors({});
         setShowForm(true);
@@ -326,6 +346,7 @@ const ManageMantras = () => {
         setEditingMantra(null);
         setError(null);
         setValidationErrors({});
+        setSelectedFile(null);
     };
 
     const getCategoryName = useCallback((cat) => {
@@ -597,6 +618,7 @@ const ManageMantras = () => {
                                         </div>
                                     )}
 
+                                    {/* Name and Category */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {field('Mantra Name', 'name', 'text', true, null, 'e.g., Gayatri Mantra')}
                                         <div>
@@ -620,12 +642,10 @@ const ManageMantras = () => {
                                             {validationErrors.category && (
                                                 <p className="text-red-500 text-xs mt-1">{validationErrors.category}</p>
                                             )}
-                                            {categoriesList.length === 0 && (
-                                                <p className="text-red-500 text-xs mt-1">⚠️ No categories found. Please create a category first.</p>
-                                            )}
                                         </div>
                                     </div>
 
+                                    {/* Sanskrit */}
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
                                             <Languages className="h-3.5 w-3.5 inline mr-1.5 text-amber-500" />
@@ -649,10 +669,14 @@ const ManageMantras = () => {
                                         )}
                                     </div>
 
+                                    {/* Translations */}
                                     <div className="border border-amber-200 dark:border-amber-800/50 rounded-xl p-5 bg-amber-50/30 dark:bg-amber-900/10">
                                         <h3 className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-4 flex items-center gap-2">
                                             <Languages className="h-4 w-4" /> Required Translations
                                         </h3>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                                            All translations are required for multi-language support
+                                        </p>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ಕನ್ನಡ (Kannada) <span className="text-red-500">*</span></label>
@@ -714,25 +738,50 @@ const ManageMantras = () => {
                                         </div>
                                     </div>
 
+                                    {/* Optional Translations */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {field('हिन्दी (Hindi) - Optional', 'hindi', 'text', false, 3, 'Hindi translation...')}
                                         {field('English Translation - Optional', 'english', 'text', false, 3, 'English translation...')}
                                     </div>
 
+                                    {/* Benefits and Meaning */}
                                     {field('Benefits / लाभ', 'benefits', 'text', true, 3, 'Benefits of chanting this mantra...')}
                                     {field('Meaning / अर्थ', 'meaning', 'text', false, 3, 'Deep meaning and explanation...')}
                                     
+                                    {/* How to Chant and Best Time */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {field('How to Chant', 'howToChant', 'text', true, 2, 'Instructions...')}
                                         {field('Best Time', 'bestTime', 'text', true, null, 'e.g., Morning, Sunrise')}
                                     </div>
 
+                                    {/* Count and Order */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {field('Recommended Count', 'recommendedCount', 'number', false)}
                                         {field('Display Order', 'order', 'number', false)}
                                     </div>
+
+                                    {/* Image Upload */}
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                                            Image (Optional)
+                                        </label>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={e => setSelectedFile(e.target.files[0])}
+                                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                                        />
+                                        {editingMantra && editingMantra.image && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                Current image: {editingMantra.image.split('/').pop()}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Audio URL */}
                                     {field('Audio URL (Optional)', 'audioUrl', 'url', false, null, 'https://example.com/mantra.mp3')}
 
+                                    {/* Featured Checkbox */}
                                     <div className="flex items-center gap-3 pt-2">
                                         <input 
                                             type="checkbox" 
@@ -746,6 +795,7 @@ const ManageMantras = () => {
                                         </label>
                                     </div>
 
+                                    {/* Buttons */}
                                     <div className="flex justify-end gap-3 pt-5 border-t border-gray-100 dark:border-gray-800">
                                         <button
                                             type="button"
