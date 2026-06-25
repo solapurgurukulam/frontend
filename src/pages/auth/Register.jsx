@@ -5,7 +5,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import { z } from 'zod';
 import { User, Mail, Lock, Eye, EyeOff, Phone, Sparkles } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { authApi } from '../../api/auth.api';
 import Button from '../../components/common/Button';
 
@@ -25,6 +24,11 @@ const Register = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    
+    // New state for inline messages
+    const [apiError, setApiError] = useState(null);
+    const [apiSuccess, setApiSuccess] = useState(null);
+
     const heroRef = useRef(null);
     const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
     const yParallax = useSpring(useTransform(scrollYProgress, [0, 1], [0, 80]), { stiffness: 100, damping: 30 });
@@ -39,13 +43,21 @@ const Register = () => {
 
     const onSubmit = async (data) => {
         setIsLoading(true);
+        setApiError(null);
+        setApiSuccess(null);
+        
         try {
             await authApi.register(data);
-            toast.success('Registration successful! Please verify your email.');
-            navigate('/login');
+            setApiSuccess('Registration successful! Redirecting to login...');
+            
+            // Optional: Wait a couple of seconds before redirecting so they can read the success message
+            setTimeout(() => {
+                navigate('/login');
+            }, 2000);
+            
         } catch (error) {
             console.error('Registration error:', error);
-            toast.error(error.response?.data?.message || 'Registration failed');
+            setApiError(error.response?.data?.message || 'Registration failed. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -127,6 +139,29 @@ const Register = () => {
                     className="w-full max-w-md bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-xl border border-amber-200/40 p-6 md:p-8"
                 >
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+                        
+                        {/* Inline Error Message */}
+                        {apiError && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: -10 }} 
+                                animate={{ opacity: 1, y: 0 }}
+                                className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400 text-sm"
+                            >
+                                {apiError}
+                            </motion.div>
+                        )}
+
+                        {/* Inline Success Message */}
+                        {apiSuccess && (
+                            <motion.div 
+                                initial={{ opacity: 0, y: -10 }} 
+                                animate={{ opacity: 1, y: 0 }}
+                                className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-600 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400 text-sm"
+                            >
+                                {apiSuccess}
+                            </motion.div>
+                        )}
+
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                 Full Name
