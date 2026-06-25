@@ -103,7 +103,7 @@ const ManageAdmins = () => {
         try {
             const response = await apiClient.get('/admin/all');
             if (response.data.success) {
-                // ✅ Show ALL admins including blocked ones
+                // Show ALL admins including blocked ones
                 setAdmins(response.data.data || []);
             } else {
                 setAdmins([]);
@@ -174,7 +174,7 @@ const ManageAdmins = () => {
         setFoundUser(null);
     };
 
-    // Search User by Email or Phone - FIXED: Uses GET request to avoid [object Object]
+    // Search User by Email or Phone - Uses GET request to avoid [object Object]
     const handleSearchUser = async () => {
         if (!addExistingForm.email && !addExistingForm.phone) {
             return toast.error('Please enter email or phone to search');
@@ -182,20 +182,20 @@ const ManageAdmins = () => {
 
         setSearching(true);
         try {
-            // ✅ Use GET request with query parameters
+            // Use GET request with query parameters
             const params = new URLSearchParams();
             if (addExistingForm.email) params.append('email', addExistingForm.email.trim());
             if (addExistingForm.phone) params.append('phone', addExistingForm.phone.trim());
 
             const response = await apiClient.get(`/admin/search-user?${params.toString()}`);
             if (response.data.success) {
-                // ✅ Properly set found user with all data
+                // Properly set found user with all data
                 setFoundUser(response.data.data);
                 toast.success('User found successfully!');
                 
                 // Check if user is already an admin
                 if (response.data.data.role === 'admin' || response.data.data.role === 'super_admin') {
-                    toast.warning(`User is already an ${response.data.data.role}`);
+                    toast(`User is already an ${response.data.data.role}`, { icon: '⚠️' });
                 }
             }
         } catch (error) {
@@ -206,24 +206,46 @@ const ManageAdmins = () => {
         }
     };
 
-    // Verify User (Send Verification Email) - FIXED: Better email handling
+    // Verify User (Send Verification Email)
+    // FIX: now sends email/name in the request body so the backend has what
+    // it needs to actually generate + send the mail, and surfaces the REAL
+    // backend error instead of a generic message so you can diagnose why
+    // mail isn't arriving (bad SMTP config, missing field, 500, etc.)
     const handleVerifyUser = async (userId, email, name) => {
+        if (!userId || !email) {
+            return toast.error('Missing user details — please search again');
+        }
+
         if (!window.confirm(`Send verification email to ${email}?`)) return;
 
         setVerifying(true);
         try {
-            const response = await apiClient.post(`/admin/verify-user/${userId}`);
+            const response = await apiClient.post(`/admin/verify-user/${userId}`, {
+                email,
+                name,
+            });
+
             if (response.data.success) {
-                toast.success(`Verification email sent to ${email}`);
+                toast.success(response.data.message || `Verification email sent to ${email}`);
                 // Refresh user status by searching again
                 await handleSearchUser();
             } else {
-                toast.error(response.data.message || 'Failed to send verification email');
+                // Backend responded 2xx but didn't confirm success — show its message
+                toast.error(response.data.message || 'Email service did not confirm delivery');
             }
         } catch (error) {
-            const errorMsg = error.response?.data?.message || 'Failed to send verification email';
+            const status = error.response?.status;
+            const backendMsg = error.response?.data?.message;
+            const errorMsg =
+                backendMsg ||
+                (status === 500
+                    ? 'Email server error — check backend mail/SMTP configuration'
+                    : status === 404
+                    ? 'Verify-user endpoint not found — check API route'
+                    : 'Failed to send verification email');
+
             toast.error(errorMsg);
-            console.error('Verify user error:', error);
+            console.error('Verify user error:', status, error.response?.data || error.message);
         } finally {
             setVerifying(false);
         }
@@ -265,9 +287,9 @@ const ManageAdmins = () => {
                 errorMsg.toLowerCase().includes('duplicate') ||
                 errorMsg.toLowerCase().includes('existing')) {
                 
-                toast.error(
+                toast.custom(
                     (t) => (
-                        <div className="max-w-xs">
+                        <div className="max-w-xs bg-white dark:bg-gray-800 shadow-lg rounded-xl p-4 border border-gray-200 dark:border-gray-700">
                             <p className="font-semibold text-red-700">⚠️ User Already Exists!</p>
                             <p className="text-sm text-gray-600 mt-1">{errorMsg}</p>
                             <div className="flex gap-2 mt-3">
@@ -333,7 +355,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // ADD EXISTING USER AS ADMIN - FIXED: Properly changes role from user to admin
+    // ADD EXISTING USER AS ADMIN
     const handleAddExistingAdmin = async (e) => {
         e.preventDefault();
         
@@ -441,17 +463,22 @@ const ManageAdmins = () => {
         }
     };
 
-    // UNBLOCK ADMIN - FIXED: Properly restores admin role when selected
+    // UNBLOCK ADMIN
+    // FIX: previously this showed TWO confirm dialogs back-to-back, and if the
+    // user cancelled the SECOND one, the "restore as admin" choice from the
+    // first dialog was silently discarded and nothing happened at all. Now
+    // there's a single confirm to unblock, then one follow-up choice for
+    // whether to also restore the admin role.
     const handleUnblockAdmin = async (admin) => {
         if (!isSuperAdmin()) {
             return toast.error('Only Super Admin can unblock admins');
         }
-        
-        const shouldRestore = window.confirm(
-            `Do you want to restore ${admin.name} as Admin? Click OK to restore, Cancel to keep as regular user.`
-        );
-        
+
         if (!window.confirm(`Are you sure you want to unblock ${admin.name}?`)) return;
+
+        const shouldRestore = window.confirm(
+            `Also restore ${admin.name} as Admin? Click OK to restore as Admin, Cancel to unblock as a regular user.`
+        );
 
         setLoading(true);
         try {
@@ -526,7 +553,7 @@ const ManageAdmins = () => {
                     {isSuperAdmin() && (
                         <div className="flex flex-wrap gap-3">
                             <button
-                                onClick={handleOpenAddExistingModal}
+                                onClick={() => handleOpenAddExistingModal()}
                                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
                             >
                                 <UserPlus className="h-5 w-5" />
@@ -649,7 +676,7 @@ const ManageAdmins = () => {
                                             {isSuperAdmin() && (
                                                 <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-gray-100 dark:border-gray-700">
                                                     {isBlocked ? (
-                                                        // ✅ Show Unblock button for blocked users
+                                                        // Show Unblock button for blocked users
                                                         <button
                                                             onClick={() => handleUnblockAdmin(admin)}
                                                             className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors text-sm font-medium"
@@ -953,7 +980,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin - FIXED: No [object Object] placeholder */}
+                {/* MODAL 3: Add Existing User as Admin */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1023,7 +1050,7 @@ const ManageAdmins = () => {
                                             </div>
                                         </div>
 
-                                        {/* Email Input - FIXED: Proper placeholder (no [object Object]) */}
+                                        {/* Email Input */}
                                         {searchMethod === 'email' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1082,7 +1109,7 @@ const ManageAdmins = () => {
                                             </div>
                                         )}
 
-                                        {/* Found User Details - Properly displays user data */}
+                                        {/* Found User Details */}
                                         {foundUser && (
                                             <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-200 dark:border-gray-600">
                                                 <div className="flex items-center justify-between">
