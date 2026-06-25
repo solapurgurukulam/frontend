@@ -212,12 +212,9 @@ const ManageAdmins = () => {
                 handleCloseCreateModal();
             }
         } catch (error) {
+            // FIXED: Now directly shows the backend error message no matter the status code
             const errorMsg = error.response?.data?.message || 'Failed to create admin';
-            if (error.response?.status === 400) {
-                toast.error(errorMsg);
-            } else {
-                toast.error('An error occurred while creating admin.');
-            }
+            toast.error(errorMsg);
         } finally {
             setLoading(false);
         }
