@@ -179,6 +179,14 @@ const ManageMantras = () => {
         if (!formData.howToChant?.trim()) errors.howToChant = 'How to chant is required';
         if (!formData.bestTime?.trim()) errors.bestTime = 'Best time is required';
         
+        // Validate numeric fields
+        if (formData.order && isNaN(parseInt(formData.order))) {
+            errors.order = 'Display order must be a number';
+        }
+        if (formData.recommendedCount && isNaN(parseInt(formData.recommendedCount))) {
+            errors.recommendedCount = 'Recommended count must be a number';
+        }
+        
         setValidationErrors(errors);
         return Object.keys(errors).length === 0;
     };
@@ -213,7 +221,7 @@ const ManageMantras = () => {
                 benefits: formData.benefits.trim(),
                 howToChant: formData.howToChant.trim(),
                 bestTime: formData.bestTime.trim(),
-                recommendedCount: formData.recommendedCount || 108,
+                recommendedCount: parseInt(formData.recommendedCount) || 108,
                 meaning: formData.meaning?.trim() || '',
                 audioUrl: formData.audioUrl?.trim() || '',
                 category: formData.category,
@@ -254,7 +262,7 @@ const ManageMantras = () => {
                         errorMsg = 'A mantra with this name already exists. Please use a different name.';
                     }
                 } else if (error.response.status === 400) {
-                    errorMsg = 'Validation error. Please check all required fields.';
+                    errorMsg = 'Validation error. Please check all required fields and ensure numbers are valid.';
                 } else if (error.response.status === 403) {
                     errorMsg = 'You do not have permission to perform this action.';
                 } else if (error.response.status === 500) {
@@ -365,12 +373,33 @@ const ManageMantras = () => {
                         className={`w-full px-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
                         required={required}
                     />
+                ) : type === 'number' ? (
+                    <input
+                        type="number"
+                        value={formData[key] || 0}
+                        onChange={e => {
+                            const value = e.target.value;
+                            setFormData({ ...formData, [key]: value });
+                            if (validationErrors[key]) {
+                                setValidationErrors({ ...validationErrors, [key]: '' });
+                            }
+                            // Validate number
+                            if (value && isNaN(parseInt(value))) {
+                                setValidationErrors({ ...validationErrors, [key]: `${label} must be a valid number` });
+                            }
+                        }}
+                        placeholder={placeholder}
+                        className={`w-full px-4 py-2.5 border ${hasError ? 'border-red-500' : 'border-gray-200 dark:border-gray-600'} rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition`}
+                        required={required}
+                        min="0"
+                        step="1"
+                    />
                 ) : (
                     <input
                         type={type}
                         value={formData[key] || ''}
                         onChange={e => {
-                            setFormData({ ...formData, [key]: type === 'number' ? parseInt(e.target.value) || 0 : e.target.value });
+                            setFormData({ ...formData, [key]: e.target.value });
                             if (validationErrors[key]) {
                                 setValidationErrors({ ...validationErrors, [key]: '' });
                             }
