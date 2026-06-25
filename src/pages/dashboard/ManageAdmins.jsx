@@ -946,7 +946,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin - Fixed placeholder issue */}
+                {/* MODAL 3: Add Existing User as Admin - FIXED PLACEHOLDER */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1016,7 +1016,7 @@ const ManageAdmins = () => {
                                             </div>
                                         </div>
 
-                                        {/* Input Field - FIXED: Removed [object Object] */}
+                                        {/* Email Input - FIXED: No [object Object] */}
                                         {searchMethod === 'email' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
