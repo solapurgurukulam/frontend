@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Plus, Edit, Trash2, Shield, User, Mail, Phone, 
     CheckCircle, X, Users, Award, UserPlus, UserCheck, 
-    Info, AlertCircle, Search, UserX, Send 
+    Info, AlertCircle, Search, UserX
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -202,7 +202,7 @@ const ManageAdmins = () => {
         }
     };
 
-    // CREATE NEW ADMIN
+    // CREATE NEW ADMIN (for new users)
     const handleCreateAdmin = async (e) => {
         e.preventDefault();
         
@@ -330,7 +330,7 @@ const ManageAdmins = () => {
         try {
             const payload = {
                 email: foundUser.email,
-                phone: foundUser.phone,
+                phone: foundUser.phone || '',
                 role: 'admin'
             };
 
@@ -748,7 +748,7 @@ const ManageAdmins = () => {
                     )}
                 </AnimatePresence>
 
-                {/* MODAL 3: Add Existing User as Admin */}
+                {/* MODAL 3: Add Existing User as Admin - FIXED: No [object Object] placeholder */}
                 <AnimatePresence>
                     {isAddExistingModalOpen && (
                         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -770,9 +770,9 @@ const ManageAdmins = () => {
 
                                 <div className="p-5">
                                     <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mb-4">
-                                        <p className="text-sm text-blue-700 dark:text-blue-300">
-                                            <Info className="h-4 w-4 inline mr-1" />
-                                            Find an existing user by email or phone to promote them as admin
+                                        <p className="text-sm text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                                            <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                                            <span>Find an existing user by email or phone to promote them as admin</span>
                                         </p>
                                     </div>
 
@@ -818,7 +818,7 @@ const ManageAdmins = () => {
                                             </div>
                                         </div>
 
-                                        {/* Email Input */}
+                                        {/* Email Input - FIXED: Removed [object Object] placeholder */}
                                         {searchMethod === 'email' ? (
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -833,7 +833,7 @@ const ManageAdmins = () => {
                                                             email: e.target.value, 
                                                             phone: '' 
                                                         })}
-                                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                                                         placeholder="Enter user email"
                                                         required={searchMethod === 'email'}
                                                     />
@@ -861,7 +861,7 @@ const ManageAdmins = () => {
                                                             phone: e.target.value, 
                                                             email: '' 
                                                         })}
-                                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition"
                                                         placeholder="Enter phone number"
                                                         required={searchMethod === 'phone'}
                                                     />
