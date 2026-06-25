@@ -8,16 +8,31 @@ import { User, Mail, Lock, Eye, EyeOff, Phone, Sparkles } from 'lucide-react';
 import { authApi } from '../../api/auth.api';
 import Button from '../../components/common/Button';
 
+// --- STRICT VALIDATION SCHEMA ---
 const registerSchema = z.object({
-    name: z.string().min(2, 'Name must be at least 2 characters'),
-    email: z.string().email('Invalid email address'),
-    phone: z.string().min(10, 'Phone number must be at least 10 digits'),
-    password: z.string().min(6, 'Password must be at least 6 characters'),
+    name: z.string()
+        .min(2, 'Name must be at least 2 characters')
+        .regex(/^[A-Za-z\s]+$/, 'Name can only contain letters and spaces'), // Only characters
+    
+    email: z.string()
+        .regex(/^[A-Za-z][a-zA-Z0-9._]*@gmail\.com$/, 'Email must start with a letter and end with @gmail.com'), // Starts with letter + @gmail.com
+    
+    phone: z.string()
+        .regex(/^\d{10}$/, 'Phone number must be exactly 10 digits'), // Exactly 10 numbers
+    
+    password: z.string()
+        .min(8, 'Password must be at least 8 characters')
+        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+        .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+        .regex(/[0-9]/, 'Password must contain at least one number')
+        .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'), // Strong password rules
+    
     confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
 });
+// --------------------------------
 
 const Register = () => {
     const navigate = useNavigate();
@@ -25,7 +40,6 @@ const Register = () => {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     
-    // New state for inline messages
     const [apiError, setApiError] = useState(null);
     const [apiSuccess, setApiSuccess] = useState(null);
 
@@ -39,6 +53,7 @@ const Register = () => {
         formState: { errors },
     } = useForm({
         resolver: zodResolver(registerSchema),
+        mode: "onChange", // Validates as the user types
     });
 
     const onSubmit = async (data) => {
@@ -50,7 +65,6 @@ const Register = () => {
             await authApi.register(data);
             setApiSuccess('Registration successful! Redirecting to login...');
             
-            // Optional: Wait a couple of seconds before redirecting so they can read the success message
             setTimeout(() => {
                 navigate('/login');
             }, 2000);
@@ -119,16 +133,6 @@ const Register = () => {
                         Join our spiritual community
                     </motion.p>
                 </motion.div>
-
-                <motion.div
-                    className="absolute bottom-6 left-1/2 transform -translate-x-1/2"
-                    animate={{ y: [0, 6, 0] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                >
-                    <div className="w-4 h-6 rounded-full border border-amber-400 flex justify-center">
-                        <div className="w-0.5 h-1.5 bg-amber-400 rounded-full mt-1.5" />
-                    </div>
-                </motion.div>
             </section>
 
             <div className="flex justify-center px-4 pb-12">
@@ -140,7 +144,6 @@ const Register = () => {
                 >
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                         
-                        {/* Inline Error Message */}
                         {apiError && (
                             <motion.div 
                                 initial={{ opacity: 0, y: -10 }} 
@@ -151,7 +154,6 @@ const Register = () => {
                             </motion.div>
                         )}
 
-                        {/* Inline Success Message */}
                         {apiSuccess && (
                             <motion.div 
                                 initial={{ opacity: 0, y: -10 }} 
@@ -188,7 +190,7 @@ const Register = () => {
                                     type="email"
                                     {...register('email')}
                                     className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                    placeholder="you@example.com"
+                                    placeholder="johndoe@gmail.com"
                                 />
                             </div>
                             {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>}
@@ -201,10 +203,10 @@ const Register = () => {
                             <div className="relative">
                                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-400" />
                                 <input
-                                    type="tel"
+                                    type="text" 
                                     {...register('phone')}
                                     className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                    placeholder="+91 1234567890"
+                                    placeholder="1234567890"
                                 />
                             </div>
                             {errors.phone && <p className="mt-1 text-sm text-red-500">{errors.phone.message}</p>}
@@ -220,7 +222,7 @@ const Register = () => {
                                     type={showPassword ? 'text' : 'password'}
                                     {...register('password')}
                                     className="w-full pl-10 pr-10 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                    placeholder="••••••"
+                                    placeholder="••••••••"
                                 />
                                 <button
                                     type="button"
@@ -243,7 +245,7 @@ const Register = () => {
                                     type={showConfirmPassword ? 'text' : 'password'}
                                     {...register('confirmPassword')}
                                     className="w-full pl-10 pr-10 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                    placeholder="••••••"
+                                    placeholder="••••••••"
                                 />
                                 <button
                                     type="button"
