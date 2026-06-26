@@ -131,6 +131,8 @@ const ManageShlokas = () => {
     const [selectedCategory, setSelectedCategory] = useState('');
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // Add a refresh trigger state
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     // ─── Fetch Categories and Shlokas with parallel requests ───
     useEffect(() => {
@@ -158,7 +160,7 @@ const ManageShlokas = () => {
         };
 
         fetchData();
-    }, []);
+    }, [refreshTrigger]); // Add refreshTrigger as dependency
 
     // ─── Individual fetch functions ───
     const fetchShlokas = useCallback(async () => {
@@ -173,6 +175,11 @@ const ManageShlokas = () => {
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    // ─── Function to refresh data ───
+    const refreshData = useCallback(() => {
+        setRefreshTrigger(prev => prev + 1);
     }, []);
 
     // ─── Memoized filtered results ───
@@ -226,14 +233,16 @@ const ManageShlokas = () => {
                 const response = await apiClient.put(`/shlokas/${editingShloka._id}`, payload);
                 if (response.data.success) {
                     toast.success('Shloka updated successfully!');
-                    await fetchShlokas();
+                    // Refresh data after successful update
+                    refreshData();
                     closeForm();
                 }
             } else {
                 const response = await apiClient.post('/shlokas', payload);
                 if (response.data.success) {
                     toast.success('Shloka created successfully!');
-                    await fetchShlokas();
+                    // Refresh data after successful creation
+                    refreshData();
                     closeForm();
                 }
             }
@@ -245,23 +254,20 @@ const ManageShlokas = () => {
         }
     };
 
-    // ─── Delete Handler with optimistic update ───
+    // ─── Delete Handler ───
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this shloka?')) return;
         
         setIsSubmitting(true);
         try {
-            // Optimistic update
-            setShlokas(prev => prev.filter(s => s._id !== id));
-            
             const response = await apiClient.delete(`/shlokas/${id}`);
             if (response.data.success) {
                 toast.success('Shloka deleted successfully');
+                // Refresh data after successful deletion
+                refreshData();
             }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Failed to delete shloka');
-            // Refresh to sync data
-            await fetchShlokas();
         } finally {
             setIsSubmitting(false);
         }
