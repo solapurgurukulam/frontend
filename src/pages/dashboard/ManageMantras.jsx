@@ -420,7 +420,7 @@ const ManageMantras = () => {
                                                 </p>
                                             )}
 
-                                            {/* Metadata row */}
+                                            {/* Metadata row - FIXED: Added safe check for views */}
                                             <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
                                                 <span className="flex items-center gap-1">
                                                     <Clock className="h-3.5 w-3.5" /> {m.bestTime || 'Any time'}
@@ -470,7 +470,7 @@ const ManageMantras = () => {
                                 </div>
 
                                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                                    {/* ─── Form fields (unchanged) ─── */}
+                                    {/* ─── Form fields ─── */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         {field('Mantra Name', 'name', 'text', true, null, 'e.g., Gayatri Mantra')}
                                         <div>
