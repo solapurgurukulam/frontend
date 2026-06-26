@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Plus, Edit, Trash2, Search, X, BookOpen, Star, Languages, TrendingUp, ArrowRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, BookOpen, Star, Languages, TrendingUp, Hash, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const API_BASE_URL = 'https://backend-obya.onrender.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-obya.onrender.com/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
+    timeout: 30000,
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
 });
@@ -41,6 +42,7 @@ apiClient.interceptors.response.use(
     }
 );
 
+// ─── Loader Component ───
 const Loader = () => (
     <div className="flex justify-center items-center py-20">
         <div className="relative w-12 h-12">
@@ -50,11 +52,29 @@ const Loader = () => (
     </div>
 );
 
+// ─── Skeleton Loader for Cards ───
+const CardSkeleton = () => (
+    <div className="bg-white/90 dark:bg-gray-800/90 rounded-2xl overflow-hidden shadow-md animate-pulse">
+        <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700" />
+        <div className="p-5">
+            <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0" />
+                <div className="flex-1">
+                    <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-lg w-3/4" />
+                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-lg w-1/2 mt-2" />
+                </div>
+            </div>
+            <div className="mt-3 h-12 bg-gray-200 dark:bg-gray-700 rounded-xl" />
+            <div className="mt-3 h-4 bg-gray-200 dark:bg-gray-700 rounded-lg w-full" />
+        </div>
+    </div>
+);
+
 // ─── Helper: build absolute image URL ───
 const getImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
-    const baseUrl = import.meta.env.VITE_API_URL || 'https://backend-obya.onrender.com/api';
+    const baseUrl = import.meta.env.VITE_API_URL || 'https://backend-obya.onrender.com';
     return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 };
 
@@ -110,34 +130,72 @@ const ManageShlokas = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [formData, setFormData] = useState(EMPTY_FORM);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    useEffect(() => { fetchCategories(); fetchShlokas(); }, []);
+    // ─── Fetch Categories and Shlokas with parallel requests ───
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                // Parallel fetching for better performance
+                const [categoriesRes, shlokasRes] = await Promise.all([
+                    apiClient.get('/categories?limit=100'),
+                    apiClient.get('/shlokas?limit=100&sort=order')
+                ]);
 
-    const fetchCategories = async () => {
-        try {
-            const response = await apiClient.get('/categories?limit=100');
-            if (response.data.success) setCategoriesList(response.data.data || []);
-        } catch (error) {
-            toast.error('Failed to fetch categories');
-        }
-    };
+                if (categoriesRes.data.success) {
+                    setCategoriesList(categoriesRes.data.data || []);
+                }
+                if (shlokasRes.data.success) {
+                    setShlokas(shlokasRes.data.data || []);
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                toast.error('Failed to load data');
+            } finally {
+                setLoading(false);
+            }
+        };
 
-    const fetchShlokas = async () => {
+        fetchData();
+    }, []);
+
+    // ─── Individual fetch functions ───
+    const fetchShlokas = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/shlokas?limit=100');
-            if (response.data.success) setShlokas(response.data.data || []);
-            else setShlokas([]);
+            const response = await apiClient.get('/shlokas?limit=100&sort=order');
+            if (response.data.success) {
+                setShlokas(response.data.data || []);
+            }
         } catch (error) {
             toast.error('Failed to fetch shlokas');
-            setShlokas([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
+    // ─── Memoized filtered results ───
+    const filteredShlokas = useMemo(() => {
+        if (!shlokas || shlokas.length === 0) return [];
+        
+        return shlokas.filter(s => {
+            const searchLower = searchTerm.toLowerCase();
+            const matchSearch = s.name?.toLowerCase().includes(searchLower) ||
+                s.sanskrit?.toLowerCase().includes(searchLower);
+            
+            const matchCategory = !selectedCategory || 
+                s.category?._id === selectedCategory || 
+                s.category === selectedCategory;
+            
+            return matchSearch && matchCategory;
+        });
+    }, [shlokas, searchTerm, selectedCategory]);
+
+    // ─── Form Submit Handler ───
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
         if (!formData.name?.trim()) return toast.error('Shloka name is required');
         if (!formData.category) return toast.error('Please select a category');
         if (!formData.sanskrit?.trim()) return toast.error('Sanskrit text is required');
@@ -145,7 +203,8 @@ const ManageShlokas = () => {
         if (!formData.marathi?.trim()) return toast.error('Marathi translation is required');
         if (!formData.tamil?.trim()) return toast.error('Telugu translation is required');
 
-        setLoading(true);
+        setIsSubmitting(true);
+        
         try {
             const payload = {
                 name: formData.name.trim(),
@@ -166,42 +225,50 @@ const ManageShlokas = () => {
             if (editingShloka) {
                 const response = await apiClient.put(`/shlokas/${editingShloka._id}`, payload);
                 if (response.data.success) {
-                    toast.success('Shloka updated!');
-                    fetchShlokas();
+                    toast.success('Shloka updated successfully!');
+                    await fetchShlokas();
                     closeForm();
                 }
             } else {
                 const response = await apiClient.post('/shlokas', payload);
                 if (response.data.success) {
-                    toast.success('Shloka created!');
-                    fetchShlokas();
+                    toast.success('Shloka created successfully!');
+                    await fetchShlokas();
                     closeForm();
                 }
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to save shloka');
+            const message = error.response?.data?.message || 'Failed to save shloka';
+            toast.error(message);
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
+    // ─── Delete Handler with optimistic update ───
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this shloka?')) return;
-        setLoading(true);
+        
+        setIsSubmitting(true);
         try {
+            // Optimistic update
+            setShlokas(prev => prev.filter(s => s._id !== id));
+            
             const response = await apiClient.delete(`/shlokas/${id}`);
             if (response.data.success) {
-                toast.success('Shloka deleted');
-                fetchShlokas();
+                toast.success('Shloka deleted successfully');
             }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Failed to delete shloka');
+            // Refresh to sync data
+            await fetchShlokas();
         } finally {
-            setLoading(false);
+            setIsSubmitting(false);
         }
     };
 
-    const openForm = (shloka = null) => {
+    // ─── Form Open/Close ───
+    const openForm = useCallback((shloka = null) => {
         if (shloka) {
             setEditingShloka(shloka);
             setFormData({
@@ -223,24 +290,44 @@ const ManageShlokas = () => {
             setFormData(EMPTY_FORM);
         }
         setShowForm(true);
-    };
+    }, []);
 
-    const closeForm = () => { setShowForm(false); setEditingShloka(null); };
+    const closeForm = useCallback(() => {
+        setShowForm(false);
+        setEditingShloka(null);
+        setFormData(EMPTY_FORM);
+    }, []);
 
-    const getCategoryName = (cat) => {
+    // ─── Get Category Name ───
+    const getCategoryName = useCallback((cat) => {
         if (cat?.name) return cat.name;
         const found = categoriesList.find(c => c._id === cat);
         return found ? found.name : 'Unknown';
-    };
+    }, [categoriesList]);
 
-    const filteredShlokas = (shlokas || []).filter(s => {
-        const matchSearch = s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            s.sanskrit?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCategory = !selectedCategory || s.category?._id === selectedCategory || s.category === selectedCategory;
-        return matchSearch && matchCategory;
-    });
-
-    if (loading && shlokas.length === 0) return <Loader />;
+    // ─── Render Skeletons while loading ───
+    if (loading && shlokas.length === 0) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 p-6 md:p-8">
+                <div className="max-w-7xl mx-auto">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+                        <div>
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100/50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium mb-3">
+                                <BookOpen className="h-3.5 w-3.5" />
+                                Content Management
+                            </div>
+                            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Shlokas</h1>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {Array(6).fill(0).map((_, i) => (
+                            <CardSkeleton key={i} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -309,7 +396,7 @@ const ManageShlokas = () => {
                         animate="visible"
                         className="grid grid-cols-1 lg:grid-cols-2 gap-6"
                     >
-                        {filteredShlokas.map((s, idx) => {
+                        {filteredShlokas.map((s) => {
                             const categoryName = getCategoryName(s.category);
                             const cat = categoriesList.find(c => c._id === (s.category?._id || s.category));
                             const catImage = cat?.image ? getImageUrl(cat.image) : null;
@@ -320,12 +407,10 @@ const ManageShlokas = () => {
                             return (
                                 <motion.div key={s._id} variants={cardVariants} whileHover={{ y: -4, transition: { type: 'spring', stiffness: 200 } }}>
                                     <div className={`group bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 border ${borderColor} hover:border-amber-400/60`}>
-                                        {/* Pastel color accent bar */}
                                         <div className={`h-1.5 w-full bg-gradient-to-r ${gradientBg}`} />
 
                                         <div className="p-5">
                                             <div className="flex items-start gap-3">
-                                                {/* Category Image / Avatar */}
                                                 <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40 flex items-center justify-center shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-white/50">
                                                     {catImage ? (
                                                         <img
@@ -362,6 +447,7 @@ const ManageShlokas = () => {
                                                         onClick={() => openForm(s)}
                                                         className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition-colors"
                                                         title="Edit"
+                                                        disabled={isSubmitting}
                                                     >
                                                         <Edit className="h-3.5 w-3.5 text-blue-600" />
                                                     </button>
@@ -369,13 +455,13 @@ const ManageShlokas = () => {
                                                         onClick={() => handleDelete(s._id)}
                                                         className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition-colors"
                                                         title="Delete"
+                                                        disabled={isSubmitting}
                                                     >
                                                         <Trash2 className="h-3.5 w-3.5 text-red-500" />
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            {/* Sanskrit preview */}
                                             {s.sanskrit && (
                                                 <div className="mt-3 font-devanagari text-sm text-gray-600 dark:text-gray-300 line-clamp-2 bg-amber-50/40 dark:bg-amber-900/10 rounded-xl px-3 py-2 leading-relaxed">
                                                     {s.sanskrit.slice(0, 120)}
@@ -383,10 +469,9 @@ const ManageShlokas = () => {
                                                 </div>
                                             )}
 
-                                            {/* Metadata row */}
                                             <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
                                                 <span className="flex items-center gap-1">
-                                                    <TrendingUp className="h-3.5 w-3.5" /> Order: #{s.order || 0}
+                                                    <Hash className="h-3.5 w-3.5" /> Order: #{s.order || 0}
                                                 </span>
                                                 <span className="flex items-center gap-1">
                                                     <TrendingUp className="h-3.5 w-3.5" /> {(s.views || 0).toLocaleString()}
@@ -400,7 +485,6 @@ const ManageShlokas = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Explore action */}
                                             <div className="mt-3 flex justify-end">
                                                 <span className="text-amber-600 text-xs font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
                                                     View <ArrowRight className="h-3.5 w-3.5" />
@@ -414,6 +498,7 @@ const ManageShlokas = () => {
                     </motion.div>
                 )}
 
+                {/* ─── Modal Form ─── */}
                 <AnimatePresence>
                     {showForm && (
                         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeForm}>
@@ -437,7 +522,6 @@ const ManageShlokas = () => {
                                 </div>
 
                                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                                    {/* ─── Form fields (unchanged) ─── */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
@@ -476,7 +560,7 @@ const ManageShlokas = () => {
                                         <input
                                             type="number"
                                             value={formData.order}
-                                            onChange={e => setFormData({ ...formData, order: parseInt(e.target.value) })}
+                                            onChange={e => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
                                             className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
                                             placeholder="0"
                                         />
@@ -505,15 +589,36 @@ const ManageShlokas = () => {
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ಕನ್ನಡ (Kannada) <span className="text-red-500">*</span></label>
-                                                <textarea required rows={4} value={formData.kannada} onChange={e => setFormData({ ...formData, kannada: e.target.value })} placeholder="Kannada translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
+                                                <textarea 
+                                                    required 
+                                                    rows={4} 
+                                                    value={formData.kannada} 
+                                                    onChange={e => setFormData({ ...formData, kannada: e.target.value })} 
+                                                    placeholder="Kannada translation..." 
+                                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-500" 
+                                                />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">मराठी (Marathi) <span className="text-red-500">*</span></label>
-                                                <textarea required rows={4} value={formData.marathi} onChange={e => setFormData({ ...formData, marathi: e.target.value })} placeholder="Marathi translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
+                                                <textarea 
+                                                    required 
+                                                    rows={4} 
+                                                    value={formData.marathi} 
+                                                    onChange={e => setFormData({ ...formData, marathi: e.target.value })} 
+                                                    placeholder="Marathi translation..." 
+                                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-500" 
+                                                />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">తెలుగు (Telugu) <span className="text-red-500">*</span></label>
-                                                <textarea required rows={4} value={formData.tamil} onChange={e => setFormData({ ...formData, tamil: e.target.value })} placeholder="Telugu translation..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-amber-500" />
+                                                <textarea 
+                                                    required 
+                                                    rows={4} 
+                                                    value={formData.tamil} 
+                                                    onChange={e => setFormData({ ...formData, tamil: e.target.value })} 
+                                                    placeholder="Telugu translation..." 
+                                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-500" 
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -521,22 +626,46 @@ const ManageShlokas = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">हिन्दी (Hindi) - Optional</label>
-                                            <textarea rows={3} value={formData.hindi} onChange={e => setFormData({ ...formData, hindi: e.target.value })} placeholder="Hindi translation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
+                                            <textarea 
+                                                rows={3} 
+                                                value={formData.hindi} 
+                                                onChange={e => setFormData({ ...formData, hindi: e.target.value })} 
+                                                placeholder="Hindi translation..." 
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" 
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">English Translation - Optional</label>
-                                            <textarea rows={3} value={formData.english} onChange={e => setFormData({ ...formData, english: e.target.value })} placeholder="English translation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
+                                            <textarea 
+                                                rows={3} 
+                                                value={formData.english} 
+                                                onChange={e => setFormData({ ...formData, english: e.target.value })} 
+                                                placeholder="English translation..." 
+                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" 
+                                            />
                                         </div>
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Meaning / अर्थ - Optional</label>
-                                        <textarea rows={3} value={formData.meaning} onChange={e => setFormData({ ...formData, meaning: e.target.value })} placeholder="Deep meaning and explanation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
+                                        <textarea 
+                                            rows={3} 
+                                            value={formData.meaning} 
+                                            onChange={e => setFormData({ ...formData, meaning: e.target.value })} 
+                                            placeholder="Deep meaning and explanation..." 
+                                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" 
+                                        />
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Audio URL - Optional</label>
-                                        <input type="url" value={formData.audioUrl} onChange={e => setFormData({ ...formData, audioUrl: e.target.value })} placeholder="https://example.com/audio.mp3" className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
+                                        <input 
+                                            type="url" 
+                                            value={formData.audioUrl} 
+                                            onChange={e => setFormData({ ...formData, audioUrl: e.target.value })} 
+                                            placeholder="https://example.com/audio.mp3" 
+                                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" 
+                                        />
                                     </div>
 
                                     <div className="flex items-center gap-3 pt-2">
@@ -557,15 +686,16 @@ const ManageShlokas = () => {
                                             type="button"
                                             onClick={closeForm}
                                             className="px-5 py-2.5 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition"
+                                            disabled={isSubmitting}
                                         >
                                             Cancel
                                         </button>
                                         <button
                                             type="submit"
-                                            disabled={loading}
+                                            disabled={isSubmitting}
                                             className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
                                         >
-                                            {loading ? 'Saving...' : (editingShloka ? 'Update Shloka' : 'Create Shloka')}
+                                            {isSubmitting ? 'Saving...' : (editingShloka ? 'Update Shloka' : 'Create Shloka')}
                                         </button>
                                     </div>
                                 </form>
