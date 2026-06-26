@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Plus, Edit, Trash2, Search, X, Music, Star, Languages, TrendingUp, ArrowRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, BookOpen, Star, Languages, TrendingUp, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE_URL = 'https://backend-obya.onrender.com/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 60000,
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
 });
@@ -51,13 +50,15 @@ const Loader = () => (
     </div>
 );
 
+// ─── Helper: build absolute image URL ───
 const getImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const baseUrl = import.meta.env.VITE_API_URL || 'https://backend-obya.onrender.com/api';
     return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 };
 
+// ─── Get a soft pastel color based on category name ───
 const getCategoryColor = (categoryName) => {
     if (!categoryName) return 'from-amber-100 to-orange-200';
     const name = categoryName.toLowerCase();
@@ -71,6 +72,7 @@ const getCategoryColor = (categoryName) => {
     return 'from-amber-100 to-orange-200';
 };
 
+// ─── Get a gradient border color ───
 const getBorderColor = (categoryName) => {
     if (!categoryName) return 'border-amber-200';
     const name = categoryName.toLowerCase();
@@ -99,17 +101,17 @@ const EMPTY_FORM = {
     isFeatured: false,
 };
 
-const ManageMantras = () => {
-    const [mantras, setMantras] = useState([]);
+const ManageShlokas = () => {
+    const [shlokas, setShlokas] = useState([]);
     const [categoriesList, setCategoriesList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [editingMantra, setEditingMantra] = useState(null);
+    const [editingShloka, setEditingShloka] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [formData, setFormData] = useState(EMPTY_FORM);
 
-    useEffect(() => { fetchCategories(); fetchMantras(); }, []);
+    useEffect(() => { fetchCategories(); fetchShlokas(); }, []);
 
     const fetchCategories = async () => {
         try {
@@ -120,15 +122,15 @@ const ManageMantras = () => {
         }
     };
 
-    const fetchMantras = async () => {
+    const fetchShlokas = async () => {
         setLoading(true);
         try {
-            const response = await apiClient.get('/mantras?limit=100');
-            if (response.data.success) setMantras(response.data.data || []);
-            else setMantras([]);
+            const response = await apiClient.get('/shlokas?limit=100');
+            if (response.data.success) setShlokas(response.data.data || []);
+            else setShlokas([]);
         } catch (error) {
-            toast.error('Failed to fetch mantras');
-            setMantras([]);
+            toast.error('Failed to fetch shlokas');
+            setShlokas([]);
         } finally {
             setLoading(false);
         }
@@ -136,7 +138,7 @@ const ManageMantras = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.name?.trim()) return toast.error('Mantra name is required');
+        if (!formData.name?.trim()) return toast.error('Shloka name is required');
         if (!formData.category) return toast.error('Please select a category');
         if (!formData.sanskrit?.trim()) return toast.error('Sanskrit text is required');
         if (!formData.kannada?.trim()) return toast.error('Kannada translation is required');
@@ -161,72 +163,69 @@ const ManageMantras = () => {
                 isActive: true,
             };
 
-            console.log('🟢 Sending payload:', payload);
-
-            if (editingMantra) {
-                const response = await apiClient.put(`/mantras/${editingMantra._id}`, payload);
+            if (editingShloka) {
+                const response = await apiClient.put(`/shlokas/${editingShloka._id}`, payload);
                 if (response.data.success) {
-                    toast.success('Mantra updated!');
-                    fetchMantras();
+                    toast.success('Shloka updated!');
+                    fetchShlokas();
                     closeForm();
                 }
             } else {
-                const response = await apiClient.post('/mantras', payload);
+                const response = await apiClient.post('/shlokas', payload);
                 if (response.data.success) {
-                    toast.success('Mantra created!');
-                    fetchMantras();
+                    toast.success('Shloka created!');
+                    fetchShlokas();
                     closeForm();
                 }
             }
         } catch (error) {
-            console.error('❌ Error:', error.response?.data || error.message);
-            toast.error(error.response?.data?.message || 'Failed to save mantra');
+            toast.error(error.response?.data?.message || 'Failed to save shloka');
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this mantra?')) return;
+        if (!window.confirm('Are you sure you want to delete this shloka?')) return;
         setLoading(true);
         try {
-            const response = await apiClient.delete(`/mantras/${id}`);
+            const response = await apiClient.delete(`/shlokas/${id}`);
             if (response.data.success) {
-                toast.success('Mantra deleted');
-                fetchMantras();
+                toast.success('Shloka deleted');
+                fetchShlokas();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to delete mantra');
+            toast.error(error.response?.data?.message || 'Failed to delete shloka');
         } finally {
             setLoading(false);
         }
     };
 
-    const openForm = (mantra = null) => {
-        if (mantra) {
-            setEditingMantra(mantra);
+    const openForm = (shloka = null) => {
+        if (shloka) {
+            setEditingShloka(shloka);
             setFormData({
-                name: mantra.name || '',
-                sanskrit: mantra.sanskrit || '',
-                kannada: mantra.kannada || '',
-                marathi: mantra.marathi || '',
-                tamil: mantra.tamil || '',
-                hindi: mantra.hindi || '',
-                english: mantra.english || '',
-                meaning: mantra.meaning || '',
-                audioUrl: mantra.audioUrl || '',
-                category: mantra.category?._id || mantra.category || '',
-                order: mantra.order || 0,
-                isFeatured: mantra.isFeatured || false,
+                name: shloka.name || '',
+                sanskrit: shloka.sanskrit || '',
+                kannada: shloka.kannada || '',
+                marathi: shloka.marathi || '',
+                tamil: shloka.tamil || '',
+                hindi: shloka.hindi || '',
+                english: shloka.english || '',
+                meaning: shloka.meaning || '',
+                audioUrl: shloka.audioUrl || '',
+                category: shloka.category?._id || shloka.category || '',
+                order: shloka.order || 0,
+                isFeatured: shloka.isFeatured || false,
             });
         } else {
-            setEditingMantra(null);
+            setEditingShloka(null);
             setFormData(EMPTY_FORM);
         }
         setShowForm(true);
     };
 
-    const closeForm = () => { setShowForm(false); setEditingMantra(null); };
+    const closeForm = () => { setShowForm(false); setEditingShloka(null); };
 
     const getCategoryName = (cat) => {
         if (cat?.name) return cat.name;
@@ -234,14 +233,14 @@ const ManageMantras = () => {
         return found ? found.name : 'Unknown';
     };
 
-    const filteredMantras = (mantras || []).filter(m => {
-        const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            m.sanskrit?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCategory = !selectedCategory || m.category?._id === selectedCategory || m.category === selectedCategory;
+    const filteredShlokas = (shlokas || []).filter(s => {
+        const matchSearch = s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            s.sanskrit?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchCategory = !selectedCategory || s.category?._id === selectedCategory || s.category === selectedCategory;
         return matchSearch && matchCategory;
     });
 
-    if (loading && mantras.length === 0) return <Loader />;
+    if (loading && shlokas.length === 0) return <Loader />;
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -258,12 +257,12 @@ const ManageMantras = () => {
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
                     <div>
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100/50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-xs font-medium mb-3">
-                            <Music className="h-3.5 w-3.5" />
+                            <BookOpen className="h-3.5 w-3.5" />
                             Content Management
                         </div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Mantras</h1>
+                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">Shlokas</h1>
                         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                            {mantras.length} {mantras.length === 1 ? 'mantra' : 'mantras'} total
+                            {shlokas.length} {shlokas.length === 1 ? 'shloka' : 'shlokas'} total
                         </p>
                     </div>
                     <button
@@ -271,7 +270,7 @@ const ManageMantras = () => {
                         className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5"
                     >
                         <Plus className="h-5 w-5" />
-                        Add Mantra
+                        Add Shloka
                     </button>
                 </div>
 
@@ -280,7 +279,7 @@ const ManageMantras = () => {
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-400" />
                         <input
                             type="text"
-                            placeholder="Search mantras by name or Sanskrit text..."
+                            placeholder="Search shlokas by name or Sanskrit text..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-amber-200/50 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition shadow-sm"
@@ -296,11 +295,11 @@ const ManageMantras = () => {
                     </select>
                 </div>
 
-                {filteredMantras.length === 0 ? (
+                {filteredShlokas.length === 0 ? (
                     <div className="text-center py-20 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-amber-200/40">
-                        <div className="text-6xl mb-4">🔱</div>
+                        <div className="text-6xl mb-4">📜</div>
                         <p className="text-gray-500 dark:text-gray-400 font-medium">
-                            {searchTerm || selectedCategory ? 'No mantras match your filters' : 'No mantras yet. Click "Add Mantra" to create one.'}
+                            {searchTerm || selectedCategory ? 'No shlokas match your filters' : 'No shlokas yet. Click "Add Shloka" to create one.'}
                         </p>
                     </div>
                 ) : (
@@ -308,23 +307,25 @@ const ManageMantras = () => {
                         variants={containerVariants}
                         initial="hidden"
                         animate="visible"
-                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
                     >
-                        {filteredMantras.map((m, idx) => {
-                            const categoryName = getCategoryName(m.category);
-                            const cat = categoriesList.find(c => c._id === (m.category?._id || m.category));
+                        {filteredShlokas.map((s, idx) => {
+                            const categoryName = getCategoryName(s.category);
+                            const cat = categoriesList.find(c => c._id === (s.category?._id || s.category));
                             const catImage = cat?.image ? getImageUrl(cat.image) : null;
                             const gradientBg = getCategoryColor(categoryName);
                             const borderColor = getBorderColor(categoryName);
                             const fallbackIcon = catImage ? null : (categoryName ? categoryName.charAt(0).toUpperCase() : '?');
 
                             return (
-                                <motion.div key={m._id} variants={cardVariants} whileHover={{ y: -4, transition: { type: 'spring', stiffness: 200 } }}>
+                                <motion.div key={s._id} variants={cardVariants} whileHover={{ y: -4, transition: { type: 'spring', stiffness: 200 } }}>
                                     <div className={`group bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 border ${borderColor} hover:border-amber-400/60`}>
+                                        {/* Pastel color accent bar */}
                                         <div className={`h-1.5 w-full bg-gradient-to-r ${gradientBg}`} />
 
                                         <div className="p-5">
                                             <div className="flex items-start gap-3">
+                                                {/* Category Image / Avatar */}
                                                 <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40 flex items-center justify-center shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-white/50">
                                                     {catImage ? (
                                                         <img
@@ -343,13 +344,13 @@ const ManageMantras = () => {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <h3 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-amber-600 transition-colors line-clamp-1">
-                                                        {m.name}
+                                                        {s.name}
                                                     </h3>
                                                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                                         <span className="inline-block px-2 py-0.5 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full">
                                                             {categoryName}
                                                         </span>
-                                                        {m.isFeatured && (
+                                                        {s.isFeatured && (
                                                             <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
                                                                 <Star className="h-3 w-3" /> Featured
                                                             </span>
@@ -358,14 +359,14 @@ const ManageMantras = () => {
                                                 </div>
                                                 <div className="flex gap-1.5 flex-shrink-0">
                                                     <button
-                                                        onClick={() => openForm(m)}
+                                                        onClick={() => openForm(s)}
                                                         className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 transition-colors"
                                                         title="Edit"
                                                     >
                                                         <Edit className="h-3.5 w-3.5 text-blue-600" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(m._id)}
+                                                        onClick={() => handleDelete(s._id)}
                                                         className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition-colors"
                                                         title="Delete"
                                                     >
@@ -374,29 +375,32 @@ const ManageMantras = () => {
                                                 </div>
                                             </div>
 
-                                            {m.sanskrit && (
+                                            {/* Sanskrit preview */}
+                                            {s.sanskrit && (
                                                 <div className="mt-3 font-devanagari text-sm text-gray-600 dark:text-gray-300 line-clamp-2 bg-amber-50/40 dark:bg-amber-900/10 rounded-xl px-3 py-2 leading-relaxed">
-                                                    {m.sanskrit.slice(0, 120)}
-                                                    {m.sanskrit.length > 120 && '...'}
+                                                    {s.sanskrit.slice(0, 120)}
+                                                    {s.sanskrit.length > 120 && '...'}
                                                 </div>
                                             )}
 
+                                            {/* Metadata row */}
                                             <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
                                                 <span className="flex items-center gap-1">
-                                                    <TrendingUp className="h-3.5 w-3.5" /> Order: #{m.order || 0}
+                                                    <TrendingUp className="h-3.5 w-3.5" /> Order: #{s.order || 0}
                                                 </span>
                                                 <span className="flex items-center gap-1">
-                                                    <TrendingUp className="h-3.5 w-3.5" /> {(m.views || 0).toLocaleString()}
+                                                    <TrendingUp className="h-3.5 w-3.5" /> {(s.views || 0).toLocaleString()}
                                                 </span>
                                                 <div className="flex flex-wrap gap-1">
-                                                    {m.kannada && <span className="text-purple-600 font-medium">ಕ</span>}
-                                                    {m.marathi && <span className="text-green-600 font-medium">म</span>}
-                                                    {m.tamil && <span className="text-red-600 font-medium">த</span>}
-                                                    {m.hindi && <span className="text-blue-600 font-medium">ह</span>}
-                                                    {m.english && <span className="text-gray-600 font-medium">EN</span>}
+                                                    {s.kannada && <span className="text-purple-600 font-medium">ಕ</span>}
+                                                    {s.marathi && <span className="text-green-600 font-medium">म</span>}
+                                                    {s.tamil && <span className="text-red-600 font-medium">த</span>}
+                                                    {s.hindi && <span className="text-blue-600 font-medium">ह</span>}
+                                                    {s.english && <span className="text-gray-600 font-medium">EN</span>}
                                                 </div>
                                             </div>
 
+                                            {/* Explore action */}
                                             <div className="mt-3 flex justify-end">
                                                 <span className="text-amber-600 text-xs font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
                                                     View <ArrowRight className="h-3.5 w-3.5" />
@@ -423,7 +427,7 @@ const ManageMantras = () => {
                                 <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6 py-5 flex justify-between items-center">
                                     <div>
                                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                                            {editingMantra ? 'Edit Mantra' : 'Add New Mantra'}
+                                            {editingShloka ? 'Edit Shloka' : 'Add New Shloka'}
                                         </h2>
                                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Fill in all required fields</p>
                                     </div>
@@ -433,14 +437,15 @@ const ManageMantras = () => {
                                 </div>
 
                                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                                    {/* ─── Form fields (unchanged) ─── */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                                                Mantra Name <span className="text-red-500">*</span>
+                                                Shloka Name <span className="text-red-500">*</span>
                                             </label>
                                             <input
                                                 type="text"
-                                                placeholder="e.g., Gayatri Mantra"
+                                                placeholder="e.g., Durga Shloka - Verse 1"
                                                 value={formData.name}
                                                 onChange={e => setFormData({ ...formData, name: e.target.value })}
                                                 className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
@@ -471,7 +476,7 @@ const ManageMantras = () => {
                                         <input
                                             type="number"
                                             value={formData.order}
-                                            onChange={e => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
+                                            onChange={e => setFormData({ ...formData, order: parseInt(e.target.value) })}
                                             className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
                                             placeholder="0"
                                         />
@@ -537,13 +542,13 @@ const ManageMantras = () => {
                                     <div className="flex items-center gap-3 pt-2">
                                         <input
                                             type="checkbox"
-                                            id="mantraFeatured"
+                                            id="shlokaFeatured"
                                             checked={formData.isFeatured}
                                             onChange={e => setFormData({ ...formData, isFeatured: e.target.checked })}
                                             className="h-4 w-4 text-amber-600 rounded focus:ring-amber-500"
                                         />
-                                        <label htmlFor="mantraFeatured" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                                            <Star className="h-4 w-4 text-amber-500" /> Featured Mantra
+                                        <label htmlFor="shlokaFeatured" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                                            <Star className="h-4 w-4 text-amber-500" /> Featured Shloka
                                         </label>
                                     </div>
 
@@ -560,7 +565,7 @@ const ManageMantras = () => {
                                             disabled={loading}
                                             className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
                                         >
-                                            {loading ? 'Saving...' : (editingMantra ? 'Update Mantra' : 'Create Mantra')}
+                                            {loading ? 'Saving...' : (editingShloka ? 'Update Shloka' : 'Create Shloka')}
                                         </button>
                                     </div>
                                 </form>
@@ -573,4 +578,4 @@ const ManageMantras = () => {
     );
 };
 
-export default ManageMantras;
+export default ManageShlokas;

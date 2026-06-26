@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Plus, Edit, Trash2, Search, X, Music, Star, Languages, TrendingUp, ArrowRight, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Music, Clock, TrendingUp, Star, Languages, Info, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const API_BASE_URL = 'https://backend-obya.0onrender.com/api/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 60000,
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
 });
@@ -51,13 +50,15 @@ const Loader = () => (
     </div>
 );
 
+// ─── Helper: build absolute image URL ───
 const getImageUrl = (path) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const baseUrl = import.meta.env.VITE_API_URL || 'https://backend-obya.onrender.com/api';
     return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 };
 
+// ─── Get a soft pastel color based on category name ───
 const getCategoryColor = (categoryName) => {
     if (!categoryName) return 'from-amber-100 to-orange-200';
     const name = categoryName.toLowerCase();
@@ -71,6 +72,7 @@ const getCategoryColor = (categoryName) => {
     return 'from-amber-100 to-orange-200';
 };
 
+// ─── Get a gradient border color ───
 const getBorderColor = (categoryName) => {
     if (!categoryName) return 'border-amber-200';
     const name = categoryName.toLowerCase();
@@ -140,8 +142,6 @@ const ManageMantras = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
-        // Validate all required fields
         if (!formData.name?.trim()) return toast.error('Mantra name is required');
         if (!formData.category) return toast.error('Please select a category');
         if (!formData.sanskrit?.trim()) return toast.error('Sanskrit text is required');
@@ -165,7 +165,7 @@ const ManageMantras = () => {
                 benefits: formData.benefits.trim(),
                 howToChant: formData.howToChant.trim(),
                 bestTime: formData.bestTime.trim(),
-                recommendedCount: parseInt(formData.recommendedCount) || 108,
+                recommendedCount: formData.recommendedCount || 108,
                 meaning: formData.meaning || '',
                 audioUrl: formData.audioUrl || '',
                 category: formData.category,
@@ -174,26 +174,14 @@ const ManageMantras = () => {
                 isActive: true,
             };
 
-            console.log('🟢 Sending Mantra payload:', JSON.stringify(payload, null, 2));
-
             if (editingMantra) {
                 const response = await apiClient.put(`/mantras/${editingMantra._id}`, payload);
-                if (response.data.success) {
-                    toast.success('Mantra updated!');
-                    fetchMantras();
-                    closeForm();
-                }
+                if (response.data.success) { toast.success('Mantra updated!'); fetchMantras(); closeForm(); }
             } else {
                 const response = await apiClient.post('/mantras', payload);
-                if (response.data.success) {
-                    toast.success('Mantra created!');
-                    fetchMantras();
-                    closeForm();
-                }
+                if (response.data.success) { toast.success('Mantra created!'); fetchMantras(); closeForm(); }
             }
         } catch (error) {
-            console.error('❌ Error details:', error.response?.data || error.message);
-            console.error('❌ Status:', error.response?.status);
             toast.error(error.response?.data?.message || 'Failed to save mantra');
         } finally {
             setLoading(false);
@@ -205,10 +193,7 @@ const ManageMantras = () => {
         setLoading(true);
         try {
             const response = await apiClient.delete(`/mantras/${id}`);
-            if (response.data.success) {
-                toast.success('Mantra deleted');
-                fetchMantras();
-            }
+            if (response.data.success) { toast.success('Mantra deleted'); fetchMantras(); }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Failed to delete mantra');
         } finally {
@@ -253,11 +238,37 @@ const ManageMantras = () => {
     };
 
     const filteredMantras = (mantras || []).filter(m => {
-        const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            m.sanskrit?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchSearch = m.name?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchCategory = !selectedCategory || m.category?._id === selectedCategory || m.category === selectedCategory;
         return matchSearch && matchCategory;
     });
+
+    const field = (label, key, type = 'text', required = false, rows = null, placeholder = '') => (
+        <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
+                {label} {required && <span className="text-red-500">*</span>}
+            </label>
+            {rows ? (
+                <textarea
+                    value={formData[key]}
+                    onChange={e => setFormData({ ...formData, [key]: e.target.value })}
+                    rows={rows}
+                    placeholder={placeholder}
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                    required={required}
+                />
+            ) : (
+                <input
+                    type={type}
+                    value={formData[key]}
+                    onChange={e => setFormData({ ...formData, [key]: type === 'number' ? parseInt(e.target.value) : e.target.value })}
+                    placeholder={placeholder}
+                    className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
+                    required={required}
+                />
+            )}
+        </div>
+    );
 
     if (loading && mantras.length === 0) return <Loader />;
 
@@ -298,7 +309,7 @@ const ManageMantras = () => {
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-amber-400" />
                         <input
                             type="text"
-                            placeholder="Search mantras by name or Sanskrit text..."
+                            placeholder="Search mantras..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-12 pr-4 py-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border border-amber-200/50 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition shadow-sm"
@@ -337,12 +348,14 @@ const ManageMantras = () => {
                             const fallbackIcon = catImage ? null : (categoryName ? categoryName.charAt(0).toUpperCase() : '?');
 
                             return (
-                                <motion.div key={m._id} variants={cardVariants} whileHover={{ y: -4, transition: { type: 'spring', stiffness: 200 } }}>
+                                <motion.div key={m._id} variants={cardVariants} whileHover={{ y: -6, transition: { type: 'spring', stiffness: 200 } }}>
                                     <div className={`group bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 border ${borderColor} hover:border-amber-400/60`}>
+                                        {/* Pastel color accent bar */}
                                         <div className={`h-1.5 w-full bg-gradient-to-r ${gradientBg}`} />
 
                                         <div className="p-5">
                                             <div className="flex items-start gap-3">
+                                                {/* Category Image / Avatar */}
                                                 <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40 flex items-center justify-center shadow-inner flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-white/50">
                                                     {catImage ? (
                                                         <img
@@ -392,6 +405,7 @@ const ManageMantras = () => {
                                                 </div>
                                             </div>
 
+                                            {/* Sanskrit preview */}
                                             {m.sanskrit && (
                                                 <div className="mt-3 font-devanagari text-sm text-gray-600 dark:text-gray-300 line-clamp-2 bg-amber-50/40 dark:bg-amber-900/10 rounded-xl px-3 py-2 leading-relaxed">
                                                     {m.sanskrit.slice(0, 120)}
@@ -399,12 +413,14 @@ const ManageMantras = () => {
                                                 </div>
                                             )}
 
+                                            {/* Benefits preview */}
                                             {m.benefits && (
-                                                <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm line-clamp-2">
-                                                    {m.benefits.slice(0, 80)}...
+                                                <p className="mt-2 text-gray-500 dark:text-gray-400 text-sm line-clamp-2 leading-relaxed">
+                                                    {m.benefits.slice(0, 100)}
                                                 </p>
                                             )}
 
+                                            {/* Metadata row */}
                                             <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100 dark:border-gray-700 gap-1">
                                                 <span className="flex items-center gap-1">
                                                     <Clock className="h-3.5 w-3.5" /> {m.bestTime || 'Any time'}
@@ -417,6 +433,7 @@ const ManageMantras = () => {
                                                 </span>
                                             </div>
 
+                                            {/* Explore action */}
                                             <div className="mt-3 flex justify-end">
                                                 <span className="text-amber-600 text-xs font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1">
                                                     View <ArrowRight className="h-3.5 w-3.5" />
@@ -453,20 +470,9 @@ const ManageMantras = () => {
                                 </div>
 
                                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                                    {/* ─── Form fields (unchanged) ─── */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                                                Mantra Name <span className="text-red-500">*</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                placeholder="e.g., Gayatri Mantra"
-                                                value={formData.name}
-                                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                                required
-                                            />
-                                        </div>
+                                        {field('Mantra Name', 'name', 'text', true, null, 'e.g., Gayatri Mantra')}
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
                                                 Category <span className="text-red-500">*</span>
@@ -486,32 +492,6 @@ const ManageMantras = () => {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Display Order</label>
-                                            <input
-                                                type="number"
-                                                value={formData.order}
-                                                onChange={e => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                                placeholder="0"
-                                            />
-                                            <p className="text-xs text-gray-400 mt-1">Lower numbers appear first</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                                                Recommended Count
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={formData.recommendedCount}
-                                                onChange={e => setFormData({ ...formData, recommendedCount: parseInt(e.target.value) || 108 })}
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                                placeholder="108"
-                                            />
-                                        </div>
-                                    </div>
-
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
                                             <Languages className="h-3.5 w-3.5 inline mr-1.5 text-amber-500" />
@@ -520,7 +500,7 @@ const ManageMantras = () => {
                                         <textarea
                                             value={formData.sanskrit}
                                             onChange={e => setFormData({ ...formData, sanskrit: e.target.value })}
-                                            rows={5}
+                                            rows={4}
                                             placeholder="संस्कृत पाठ यहाँ लिखें..."
                                             className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition font-devanagari text-lg"
                                             required
@@ -548,82 +528,30 @@ const ManageMantras = () => {
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">हिन्दी (Hindi) - Optional</label>
-                                            <textarea rows={3} value={formData.hindi} onChange={e => setFormData({ ...formData, hindi: e.target.value })} placeholder="Hindi translation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">English Translation - Optional</label>
-                                            <textarea rows={3} value={formData.english} onChange={e => setFormData({ ...formData, english: e.target.value })} placeholder="English translation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
-                                        </div>
+                                        {field('हिन्दी (Hindi) - Optional', 'hindi', 'text', false, 3, 'Hindi translation...')}
+                                        {field('English Translation - Optional', 'english', 'text', false, 3, 'English translation...')}
+                                    </div>
+
+                                    {field('Benefits / लाभ', 'benefits', 'text', true, 3, 'Benefits of chanting this mantra...')}
+                                    {field('Meaning / अर्थ', 'meaning', 'text', false, 3, 'Deep meaning and explanation...')}
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        {field('How to Chant', 'howToChant', 'text', true, 2, 'Instructions...')}
+                                        {field('Best Time', 'bestTime', 'text', true, null, 'e.g., Morning, Sunrise')}
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                                                Benefits / लाभ <span className="text-red-500">*</span>
-                                            </label>
-                                            <textarea
-                                                rows={3}
-                                                value={formData.benefits}
-                                                onChange={e => setFormData({ ...formData, benefits: e.target.value })}
-                                                placeholder="Benefits of chanting this mantra..."
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                                                How to Chant <span className="text-red-500">*</span>
-                                            </label>
-                                            <textarea
-                                                rows={3}
-                                                value={formData.howToChant}
-                                                onChange={e => setFormData({ ...formData, howToChant: e.target.value })}
-                                                placeholder="Instructions for chanting..."
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                                required
-                                            />
-                                        </div>
+                                        {field('Recommended Count', 'recommendedCount', 'number', false)}
+                                        {field('Display Order', 'order', 'number', false)}
                                     </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">
-                                                Best Time <span className="text-red-500">*</span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formData.bestTime}
-                                                onChange={e => setFormData({ ...formData, bestTime: e.target.value })}
-                                                placeholder="e.g., Morning, Sunrise, Evening"
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Meaning / अर्थ - Optional</label>
-                                            <textarea
-                                                rows={3}
-                                                value={formData.meaning}
-                                                onChange={e => setFormData({ ...formData, meaning: e.target.value })}
-                                                placeholder="Deep meaning and explanation..."
-                                                className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Audio URL - Optional</label>
-                                        <input type="url" value={formData.audioUrl} onChange={e => setFormData({ ...formData, audioUrl: e.target.value })} placeholder="https://example.com/audio.mp3" className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
-                                    </div>
+                                    {field('Audio URL (Optional)', 'audioUrl', 'url', false, null, 'https://example.com/mantra.mp3')}
 
                                     <div className="flex items-center gap-3 pt-2">
-                                        <input
-                                            type="checkbox"
-                                            id="mantraFeatured"
-                                            checked={formData.isFeatured}
-                                            onChange={e => setFormData({ ...formData, isFeatured: e.target.checked })}
+                                        <input 
+                                            type="checkbox" 
+                                            id="mantraFeatured" 
+                                            checked={formData.isFeatured} 
+                                            onChange={e => setFormData({ ...formData, isFeatured: e.target.checked })} 
                                             className="h-4 w-4 text-amber-600 rounded focus:ring-amber-500"
                                         />
                                         <label htmlFor="mantraFeatured" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
