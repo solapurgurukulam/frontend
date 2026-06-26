@@ -1,14 +1,14 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
-import { Plus, Edit, Trash2, Search, X, BookOpen, Star, Languages, TrendingUp, Hash, ArrowRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, BookOpen, Star, Languages, TrendingUp, Hash, ArrowRight, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-obya.onrender.com/api';
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 30000,
+    timeout: 15000,
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true,
 });
@@ -131,23 +131,33 @@ const ManageShlokas = () => {
     const [selectedCategory, setSelectedCategory] = useState('');
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    // Add a refresh trigger state
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [deleteModal, setDeleteModal] = useState({ show: false, id: null, name: '' });
+    const [isDeleting, setIsDeleting] = useState(false);
 
-    // ─── Fetch Categories and Shlokas with parallel requests ───
+    // ─── Cache for categories ───
+    const categoriesCache = useRef(null);
+
+    // ─── Fetch Categories and Shlokas with parallel requests and caching ───
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Parallel fetching for better performance
-                const [categoriesRes, shlokasRes] = await Promise.all([
-                    apiClient.get('/categories?limit=100'),
-                    apiClient.get('/shlokas?limit=100&sort=order')
-                ]);
-
-                if (categoriesRes.data.success) {
-                    setCategoriesList(categoriesRes.data.data || []);
+                // Use cached categories if available
+                let categoriesData = categoriesCache.current;
+                if (!categoriesData) {
+                    const categoriesRes = await apiClient.get('/categories?limit=100&select=name,image');
+                    if (categoriesRes.data.success) {
+                        categoriesData = categoriesRes.data.data || [];
+                        categoriesCache.current = categoriesData;
+                        setCategoriesList(categoriesData);
+                    }
+                } else {
+                    setCategoriesList(categoriesData);
                 }
+
+                // Fetch shlokas with limited fields for faster response
+                const shlokasRes = await apiClient.get('/shlokas?limit=100&sort=order&select=name,sanskrit,kannada,marathi,tamil,hindi,english,meaning,audioUrl,category,order,isFeatured,views');
                 if (shlokasRes.data.success) {
                     setShlokas(shlokasRes.data.data || []);
                 }
@@ -160,24 +170,9 @@ const ManageShlokas = () => {
         };
 
         fetchData();
-    }, [refreshTrigger]); // Add refreshTrigger as dependency
+    }, [refreshTrigger]);
 
-    // ─── Individual fetch functions ───
-    const fetchShlokas = useCallback(async () => {
-        setLoading(true);
-        try {
-            const response = await apiClient.get('/shlokas?limit=100&sort=order');
-            if (response.data.success) {
-                setShlokas(response.data.data || []);
-            }
-        } catch (error) {
-            toast.error('Failed to fetch shlokas');
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // ─── Function to refresh data ───
+    // ─── Function to refresh data (auto called after CRUD) ───
     const refreshData = useCallback(() => {
         setRefreshTrigger(prev => prev + 1);
     }, []);
@@ -203,12 +198,30 @@ const ManageShlokas = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!formData.name?.trim()) return toast.error('Shloka name is required');
-        if (!formData.category) return toast.error('Please select a category');
-        if (!formData.sanskrit?.trim()) return toast.error('Sanskrit text is required');
-        if (!formData.kannada?.trim()) return toast.error('Kannada translation is required');
-        if (!formData.marathi?.trim()) return toast.error('Marathi translation is required');
-        if (!formData.tamil?.trim()) return toast.error('Telugu translation is required');
+        if (!formData.name?.trim()) {
+            toast.error('Shloka name is required');
+            return;
+        }
+        if (!formData.category) {
+            toast.error('Please select a category');
+            return;
+        }
+        if (!formData.sanskrit?.trim()) {
+            toast.error('Sanskrit text is required');
+            return;
+        }
+        if (!formData.kannada?.trim()) {
+            toast.error('Kannada translation is required');
+            return;
+        }
+        if (!formData.marathi?.trim()) {
+            toast.error('Marathi translation is required');
+            return;
+        }
+        if (!formData.tamil?.trim()) {
+            toast.error('Telugu translation is required');
+            return;
+        }
 
         setIsSubmitting(true);
         
@@ -232,45 +245,52 @@ const ManageShlokas = () => {
             if (editingShloka) {
                 const response = await apiClient.put(`/shlokas/${editingShloka._id}`, payload);
                 if (response.data.success) {
-                    toast.success('Shloka updated successfully!');
-                    // Refresh data after successful update
-                    refreshData();
+                    toast.success('✨ Shloka updated successfully!');
+                    refreshData(); // Auto refresh after update
                     closeForm();
                 }
             } else {
                 const response = await apiClient.post('/shlokas', payload);
                 if (response.data.success) {
-                    toast.success('Shloka created successfully!');
-                    // Refresh data after successful creation
-                    refreshData();
+                    toast.success('🎉 Shloka created successfully!');
+                    refreshData(); // Auto refresh after create
                     closeForm();
                 }
             }
         } catch (error) {
             const message = error.response?.data?.message || 'Failed to save shloka';
-            toast.error(message);
+            toast.error(`❌ ${message}`);
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // ─── Delete Handler ───
-    const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this shloka?')) return;
+    // ─── Delete Handler with Custom Modal ───
+    const confirmDelete = (id, name) => {
+        setDeleteModal({ show: true, id, name });
+    };
+
+    const handleDelete = async () => {
+        const { id, name } = deleteModal;
+        setIsDeleting(true);
         
-        setIsSubmitting(true);
         try {
             const response = await apiClient.delete(`/shlokas/${id}`);
             if (response.data.success) {
-                toast.success('Shloka deleted successfully');
-                // Refresh data after successful deletion
-                refreshData();
+                toast.success(`🗑️ "${name}" deleted successfully!`);
+                refreshData(); // Auto refresh after delete
+                setDeleteModal({ show: false, id: null, name: '' });
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to delete shloka');
+            const message = error.response?.data?.message || 'Failed to delete shloka';
+            toast.error(`❌ ${message}`);
         } finally {
-            setIsSubmitting(false);
+            setIsDeleting(false);
         }
+    };
+
+    const closeDeleteModal = () => {
+        setDeleteModal({ show: false, id: null, name: '' });
     };
 
     // ─── Form Open/Close ───
@@ -458,7 +478,7 @@ const ManageShlokas = () => {
                                                         <Edit className="h-3.5 w-3.5 text-blue-600" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(s._id)}
+                                                        onClick={() => confirmDelete(s._id, s.name)}
                                                         className="p-1.5 rounded-lg bg-red-50 dark:bg-red-900/30 hover:bg-red-100 transition-colors"
                                                         title="Delete"
                                                         disabled={isSubmitting}
@@ -503,6 +523,68 @@ const ManageShlokas = () => {
                         })}
                     </motion.div>
                 )}
+
+                {/* ─── Delete Confirmation Modal ─── */}
+                <AnimatePresence>
+                    {deleteModal.show && (
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md border border-red-200/50 dark:border-red-800/50 overflow-hidden"
+                            >
+                                <div className="p-6">
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                                            <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Delete Shloka</h3>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <p className="text-gray-600 dark:text-gray-300">
+                                            Are you sure you want to delete "<span className="font-semibold text-red-600 dark:text-red-400">{deleteModal.name}</span>"?
+                                        </p>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                                            All associated data will be permanently removed.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex gap-3 justify-end">
+                                        <button
+                                            onClick={closeDeleteModal}
+                                            className="px-4 py-2 text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 font-medium transition"
+                                            disabled={isDeleting}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleDelete}
+                                            disabled={isDeleting}
+                                            className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                        >
+                                            {isDeleting ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                    Deleting...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Trash2 className="h-4 w-4" />
+                                                    Delete
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
 
                 {/* ─── Modal Form ─── */}
                 <AnimatePresence>
@@ -699,9 +781,16 @@ const ManageShlokas = () => {
                                         <button
                                             type="submit"
                                             disabled={isSubmitting}
-                                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
+                                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 flex items-center gap-2"
                                         >
-                                            {isSubmitting ? 'Saving...' : (editingShloka ? 'Update Shloka' : 'Create Shloka')}
+                                            {isSubmitting ? (
+                                                <>
+                                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                editingShloka ? 'Update Shloka' : 'Create Shloka'
+                                            )}
                                         </button>
                                     </div>
                                 </form>
