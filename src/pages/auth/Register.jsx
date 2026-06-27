@@ -16,9 +16,9 @@ const registerSchema = z.object({
     
     email: z.string()
         .regex(/^[A-Za-z][a-zA-Z0-9._]*@gmail\.com$/, 'Email must start with a letter and end with @gmail.com'), // Starts with letter + @gmail.com
-    
-    phone: z.string()
-        .regex(/^\d{10}$/, 'Phone number must be exactly 10 digits'), // Exactly 10 numbers
+
+phone: z.string()
+    .regex(/^[6-9]\d{9}$/, 'Phone number must start with 6-9 and be exactly 10 digits'),  // ✅ CHANGED
     
     password: z.string()
         .min(8, 'Password must be at least 8 characters')
