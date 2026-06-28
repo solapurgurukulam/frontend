@@ -594,19 +594,6 @@ const ManageMantras = () => {
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Audio URL (Optional)</label>
-                                        <input type="url" value={formData.audioUrl} onChange={e => setFormData({ ...formData, audioUrl: e.target.value })} placeholder="https://example.com/mantra.mp3" className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Mantra Image (Optional)</label>
-                                        <input type="file" accept="image/*" onChange={handleImageChange} className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100" />
-                                        {editingMantra?.image && !imageFile && (
-                                            <p className="text-xs text-gray-500 mt-1">Current image: {editingMantra.image}</p>
-                                        )}
-                                    </div>
-
                                     <div className="flex items-center gap-3 pt-2">
                                         <input type="checkbox" id="mantraFeatured" checked={formData.isFeatured} onChange={e => setFormData({ ...formData, isFeatured: e.target.checked })} className="h-4 w-4 text-amber-600 rounded focus:ring-amber-500" />
                                         <label htmlFor="mantraFeatured" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
