@@ -96,7 +96,6 @@ const EMPTY_FORM = {
     bestTime: '',
     recommendedCount: 108,
     meaning: '',
-    audioUrl: '',
     category: '',
     order: 0,
     isFeatured: false,
@@ -114,7 +113,7 @@ const ManageMantras = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [formData, setFormData] = useState(EMPTY_FORM);
-    const [imageFile, setImageFile] = useState(null);
+
 
     useEffect(() => {
         fetchCategories();
@@ -170,9 +169,6 @@ const ManageMantras = () => {
                     formDataToSend.append(key, formData[key]);
                 }
             });
-            if (imageFile) {
-                formDataToSend.append('image', imageFile);
-            }
 
             const config = {
                 headers: {
@@ -263,7 +259,6 @@ const ManageMantras = () => {
                 bestTime: mantra.bestTime || '',
                 recommendedCount: mantra.recommendedCount || 108,
                 meaning: mantra.meaning || '',
-                audioUrl: mantra.audioUrl || '',
                 category: mantra.category?._id || mantra.category || '',
                 order: mantra.order || 0,
                 isFeatured: mantra.isFeatured || false,
@@ -272,7 +267,6 @@ const ManageMantras = () => {
             setEditingMantra(null);
             setFormData(EMPTY_FORM);
         }
-        setImageFile(null);
         setShowForm(true);
         document.body.style.overflow = 'hidden';
     };
@@ -280,7 +274,6 @@ const ManageMantras = () => {
     const closeForm = () => {
         setShowForm(false);
         setEditingMantra(null);
-        setImageFile(null);
         document.body.style.overflow = 'auto';
     };
 
@@ -721,35 +714,6 @@ const ManageMantras = () => {
                                                 className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
                                             />
                                         </div>
-                                    </div>
-
-                                    {/* Image Upload */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Image (Optional)</label>
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) setImageFile(file);
-                                            }}
-                                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
-                                        />
-                                        {imageFile && (
-                                            <p className="text-xs text-green-600 mt-1">Selected: {imageFile.name}</p>
-                                        )}
-                                    </div>
-
-                                    {/* Audio URL */}
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Audio URL (Optional)</label>
-                                        <input
-                                            type="text"
-                                            value={formData.audioUrl}
-                                            onChange={(e) => setFormData({ ...formData, audioUrl: e.target.value })}
-                                            placeholder="https://..."
-                                            className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition"
-                                        />
                                     </div>
 
                                     {/* Featured */}
