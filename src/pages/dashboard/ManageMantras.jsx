@@ -4,6 +4,9 @@ import axios from 'axios';
 import { Plus, Edit, Trash2, Search, X, Music, Clock, TrendingUp, Star, Languages, Info, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const [isSubmitting, setIsSubmitting] = useState(false);
+const [deletingId, setDeletingId] = useState(null);
+
 // ✅ FIXED: Use environment variable instead of hardcoded URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-obya.onrender.com/api';
 
@@ -211,17 +214,28 @@ const ManageMantras = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this mantra?')) return;
-        setLoading(true);
-        try {
-            const response = await apiClient.delete(`/mantras/${id}`);
-            if (response.data.success) { toast.success('Mantra deleted'); fetchMantras(); }
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to delete mantra');
-        } finally {
-            setLoading(false);
+    if (!window.confirm('Are you sure you want to delete this mantra?')) return;
+    
+    setDeletingId(id); // ✅ sirf us ek mantra ka state
+    try {
+        const response = await apiClient.delete(`/mantras/${id}`);
+        if (response.data.success) {
+            toast.success('Mantra deleted');
+            setMantras(prev => prev.filter(m => m._id !== id)); // ✅ instant UI update, no refetch needed
+        } else {
+            toast.error(response.data.message || 'Delete failed');
         }
-    };
+    } catch (error) {
+        const msg = error.response?.data?.message 
+            || error.response?.data?.error 
+            || error.message 
+            || 'Server error - delete failed';
+        toast.error(msg);
+        console.error('Delete error:', error.response?.data || error);
+    } finally {
+        setDeletingId(null); 
+    }
+};
 
     const openForm = (mantra = null) => {
         if (mantra) {
