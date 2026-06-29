@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion, useMotionValue } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { shotramApi } from '../../api/shotram.api';
 import {
   Clock,
   TrendingUp,
@@ -130,10 +131,10 @@ const Home = () => {
     },
   });
   useQuery({
-    queryKey: ["featured-mantras"],
-    queryFn: async () => {
-      const data = await mantraApi.getFeatured();
-      if (Array.isArray(data)) dispatch(setFeaturedMantras(data));
+   queryKey: ["featured-shotrams"],
+  const res = await shotramApi.getAll({ isFeatured: true, limit: 6 });
+  const data = Array.isArray(res?.data) ? res.data : [];
+  if (Array.isArray(data)) dispatch(setFeaturedMantras(data));
       return data;
     },
   });
