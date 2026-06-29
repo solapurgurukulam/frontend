@@ -130,7 +130,7 @@ const Home = () => {
       return data;
     },
   });
- useQuery({
+useQuery({
     queryKey: ["featured-shotrams"],
     staleTime: 0,
     queryFn: async () => {
