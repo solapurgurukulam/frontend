@@ -19,6 +19,10 @@ export const shotramApi = {
     // Returns: { success, data: [...], pagination }
     getByCategory: (categoryId, params) =>
         axiosInstance.get(`/shotrams/category/${categoryId}`, { params }),
+    getFeatured: async () => {
+    const res = await axiosInstance.get('/shotrams', { params: { isFeatured: true, limit: 6 } });
+    return Array.isArray(res?.data) ? res.data : [];
+},
 
     // CRUD
     create: (data) => axiosInstance.post('/shotrams', data),
