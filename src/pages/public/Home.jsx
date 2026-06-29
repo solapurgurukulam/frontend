@@ -674,7 +674,7 @@ const Home = () => {
                     variants={itemVariants}
                     whileHover={{ y: -6 }}
                     onClick={() =>
-                      handleProtectedNavigation(`/mantra/${mantra.slug}`)
+                     handleProtectedNavigation(`/shotram/${mantra.slug}`)
                     }
                     className="group relative bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 cursor-pointer transition-all duration-300 hover:shadow-xl overflow-hidden"
                   >
