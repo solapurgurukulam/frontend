@@ -217,7 +217,7 @@ const ManageShotrams = () => {
                 </div>
             </div>
         ),
-        { duration: 1000, position: 'top-center' }
+        { duration: 3000, position: 'top-center' }
     );
 };
 
