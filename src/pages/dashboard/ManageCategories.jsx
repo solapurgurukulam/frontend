@@ -150,8 +150,29 @@ const ManageCategories = () => {
     };
 
     const handleDelete = (id) => {
-        if (window.confirm('Delete this category? This action cannot be undone.')) deleteMutation.mutate(id);
-    };
+    toast(
+        (t) => (
+            <div className="flex flex-col gap-3">
+                <p className="font-semibold text-gray-900">Are you sure you want to delete this category? This action cannot be undone.</p>
+                <div className="flex justify-end gap-2">
+                    <button
+                        onClick={() => toast.dismiss(t.id)}
+                        className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={() => { toast.dismiss(t.id); deleteMutation.mutate(id); }}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600"
+                    >
+                        Yes, Delete
+                    </button>
+                </div>
+            </div>
+        ),
+        { duration: 5000, position: 'top-center' }
+    );
+};
 
     const filtered = categories.filter(c => c.name?.toLowerCase().includes(searchTerm.toLowerCase()));
     const isPending = createMutation.isPending || updateMutation.isPending;
