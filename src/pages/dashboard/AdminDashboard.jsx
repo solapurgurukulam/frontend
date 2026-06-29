@@ -635,17 +635,7 @@ const AdminDashboard = () => {
           </motion.div>
         </div>
 
-        {/* Debug Info – can be removed later */}
-        <div className="mt-10 p-4 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-600">
-          <details>
-            <summary className="cursor-pointer font-medium text-gray-700 dark:text-gray-300">
-              🔍 Debug: Raw Stats Data (click to expand)
-            </summary>
-            <pre className="mt-2 p-3 bg-white dark:bg-gray-900 rounded-lg overflow-auto text-xs text-gray-800 dark:text-gray-200">
-              {JSON.stringify(stats, null, 2)}
-            </pre>
-          </details>
-        </div>
+       
       </div>
     </div>
   );
