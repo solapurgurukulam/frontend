@@ -138,7 +138,7 @@ const Home = () => {
         if (Array.isArray(data)) dispatch(setFeaturedMantras(data));
         return data;
     },
-});
+
   });
   useQuery({
     queryKey: ["popular-mantras"],
