@@ -105,7 +105,7 @@ const ManageAdmins = () => {
                 setAdmins([]);
             }
         } catch (error) {
-            toast.error('Failed to fetch admins');
+            toast.error('Failed to fetch admins',{duration:2000});
             setAdmins([]);
         } finally {
             setLoading(false);
@@ -170,11 +170,11 @@ const ManageAdmins = () => {
             const response = await apiClient.get(`/admin/search-user?${params.toString()}`);
             if (response.data.success) {
                 setFoundUser(response.data.data);
-                toast.success('User found successfully!');
+                toast.success('User found successfully!', { duration: 2000 });
             }
         } catch (error) {
             setFoundUser(null);
-            toast.error(error.response?.data?.message || 'User not found');
+           toast.error(error.response?.data?.message || 'User not found', { duration: 2000 });
         } finally {
             setSearching(false);
         }
@@ -208,13 +208,13 @@ const ManageAdmins = () => {
             const response = await apiClient.post('/admin/create', payload);
             
             if (response.data.success) {
-                toast.success(response.data.message || 'Admin created successfully');
+                toast.success(response.data.message || 'Admin created successfully', { duration: 2000 });
                 fetchAdmins();
                 handleCloseCreateModal();
             }
         } catch (error) {
             const errorMsg = error.response?.data?.message || 'Failed to create admin';
-            toast.error(errorMsg);
+            toast.error(errorMsg, { duration: 2000 });
         } finally {
             setLoading(false);
         }
@@ -238,12 +238,12 @@ const ManageAdmins = () => {
 
             const response = await apiClient.put(`/admin/${adminId}`, payload);
             if (response.data.success) {
-                toast.success(response.data.message || 'Admin updated successfully');
+                toast.success(response.data.message || 'Admin updated successfully', { duration: 2000 });
                 fetchAdmins();
                 handleCloseEditModal();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to update admin');
+            toast.error(error.response?.data?.message || 'Failed to update admin', { duration: 2000 });
         } finally {
             setLoading(false);
         }
@@ -272,12 +272,12 @@ const ManageAdmins = () => {
             const response = await apiClient.post('/admin/promote', payload);
             
             if (response.data.success) {
-                toast.success(response.data.message || 'User promoted to Admin successfully');
+               toast.success(response.data.message || 'User promoted to Admin successfully', { duration: 2000 });
                 fetchAdmins();
                 handleCloseAddExistingModal();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to add admin');
+            toast.error(error.response?.data?.message || 'Failed to add admin', { duration: 2000 });
         } finally {
             setLoading(false);
         }
@@ -288,11 +288,11 @@ const ManageAdmins = () => {
         try {
             const response = await apiClient.delete(`/admin/${adminId}`);
             if (response.data.success) {
-                toast.success('Admin demoted to regular user successfully');
+               toast.success('Admin demoted to regular user successfully', { duration: 2000 });
                 fetchAdmins();
             }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to demote admin');
+            toast.error(error.response?.data?.message || 'Failed to demote admin', { duration: 2000 });
         } finally {
             setLoading(false);
         }
@@ -334,7 +334,7 @@ const ManageAdmins = () => {
                     </div>
                 </div>
             ),
-            { duration: 5000, position: 'top-center' }
+            { duration: 2000, position: 'top-center' }
         );
     };
 
