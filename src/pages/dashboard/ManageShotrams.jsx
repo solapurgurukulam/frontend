@@ -532,10 +532,7 @@ const ManageShotrams = () => {
                                             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Meaning / अर्थ - Optional</label>
                                             <textarea rows={3} value={formData.meaning} onChange={e => setFormData({ ...formData, meaning: e.target.value })} placeholder="Deep meaning and explanation..." className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Audio URL - Optional</label>
-                                            <input type="url" value={formData.audioUrl} onChange={e => setFormData({ ...formData, audioUrl: e.target.value })} placeholder="https://example.com/audio.mp3" className="w-full px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition" />
-                                        </div>
+                                       
                                     </div>
 
                                     <div className="flex items-center gap-3 pt-2">
