@@ -558,18 +558,7 @@ const ManageShotrams = () => {
                                        
                                     </div>
 
-                                    <div className="flex items-center gap-3 pt-2">
-                                        <input
-                                            type="checkbox"
-                                            id="shotramFeatured"
-                                            checked={formData.isFeatured}
-                                            onChange={e => setFormData({ ...formData, isFeatured: e.target.checked })}
-                                            className="h-4 w-4 text-amber-600 rounded focus:ring-amber-500"
-                                        />
-                                        <label htmlFor="shotramFeatured" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                                            <Star className="h-4 w-4 text-amber-500" /> Featured Shotram
-                                        </label>
-                                    </div>
+                                    
 
                                     <div className="flex justify-end gap-3 pt-5 border-t border-gray-100 dark:border-gray-800">
                                         <button
