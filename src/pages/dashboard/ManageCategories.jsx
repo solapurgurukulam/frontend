@@ -170,7 +170,7 @@ const ManageCategories = () => {
                 </div>
             </div>
         ),
-        { duration: 5000, position: 'top-center' }
+        { duration: 2000, position: 'top-center' }
     );
 };
 
