@@ -185,18 +185,41 @@ const ManageShotrams = () => {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Delete this shotram?')) return;
-        setLoading(true);
-        try {
-            await apiClient.delete(`/shotrams/${id}`);
-            toast.success('Shotram deleted');
-            fetchShotrams();
-        } catch {
-            toast.error('Failed to delete');
-        } finally {
-            setLoading(false);
-        }
-    };
+    toast(
+        (t) => (
+            <div className="flex flex-col gap-3">
+                <p className="font-semibold text-gray-900">Are you sure you want to delete this shotram? This action cannot be undone.</p>
+                <div className="flex justify-end gap-2">
+                    <button
+                        onClick={() => toast.dismiss(t.id)}
+                        className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={async () => {
+                            toast.dismiss(t.id);
+                            setLoading(true);
+                            try {
+                                await apiClient.delete(`/shotrams/${id}`);
+                                toast.success('Shotram deleted', { duration: 2000 });
+                                fetchShotrams();
+                            } catch {
+                                toast.error('Failed to delete', { duration: 2000 });
+                            } finally {
+                                setLoading(false);
+                            }
+                        }}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600"
+                    >
+                        Yes, Delete
+                    </button>
+                </div>
+            </div>
+        ),
+        { duration: 2000, position: 'top-center' }
+    );
+};
 
     const openForm = (shotram = null) => {
         if (shotram) {
