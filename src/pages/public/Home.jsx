@@ -131,12 +131,14 @@ const Home = () => {
     },
   });
   useQuery({
-   queryKey: ["featured-shotrams"],
-  const res = await shotramApi.getAll({ isFeatured: true, limit: 6 });
-  const data = Array.isArray(res?.data) ? res.data : [];
-  if (Array.isArray(data)) dispatch(setFeaturedMantras(data));
-      return data;
+    queryKey: ["featured-shotrams"],
+    queryFn: async () => {
+        const res = await shotramApi.getAll({ isFeatured: true, limit: 6 });
+        const data = Array.isArray(res?.data) ? res.data : [];
+        if (Array.isArray(data)) dispatch(setFeaturedMantras(data));
+        return data;
     },
+});
   });
   useQuery({
     queryKey: ["popular-mantras"],
