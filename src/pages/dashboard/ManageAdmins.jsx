@@ -334,7 +334,7 @@ const ManageAdmins = () => {
                     </div>
                 </div>
             ),
-            { duration: 2000, position: 'top-center' }
+            { duration: 5000, position: 'top-center' }
         );
     };
 
