@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, useReducedMotion, useMotionValue } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { shotramApi } from '../../api/shotram.api';
+
 import {
   Clock,
   TrendingUp,
@@ -131,12 +131,11 @@ const Home = () => {
     },
   });
 useQuery({
-    queryKey: ["featured-shotrams"],
+    queryKey: ["featured-mantras"],
     staleTime: 0,
     queryFn: async () => {
-      const res = await shotramApi.getAll({ isFeatured: 'true', limit: 6 });
-      const data = Array.isArray(res?.data) ? res.data : [];
-      dispatch(setFeaturedMantras(data));
+      const data = await mantraApi.getFeatured();
+      if (Array.isArray(data)) dispatch(setFeaturedMantras(data));
       return data;
     },
   });
@@ -674,7 +673,7 @@ useQuery({
                     variants={itemVariants}
                     whileHover={{ y: -6 }}
                     onClick={() =>
-                     handleProtectedNavigation(`/shotram/${mantra.slug}`)
+                     handleProtectedNavigation(`/mantra/${mantra.slug}`)
                     }
                     className="group relative bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 cursor-pointer transition-all duration-300 hover:shadow-xl overflow-hidden"
                   >
