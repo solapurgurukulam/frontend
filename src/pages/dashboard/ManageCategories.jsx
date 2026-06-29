@@ -107,7 +107,7 @@ const ManageCategories = () => {
         onSuccess: (_, id) => {
             setCategories(prev => prev.filter(c => c._id !== id));
             queryClient.invalidateQueries(['categories-admin']);
-            toast.success('Category deleted successfully');
+            toast.success('Category deleted successfully', { duration: 2000 });
         },
         onError: (err) => toast.error(err?.response?.data?.message || 'Failed to delete category'),
     });
